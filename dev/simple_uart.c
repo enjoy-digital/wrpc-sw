@@ -97,7 +97,7 @@ static int __attribute__((unused)) suart_purge_tx_fifo( struct simple_uart_devic
 	return 0;
 }
 
-static int __attribute__((unused)) suart_purge_rx_fifo( struct simple_uart_device *dev )
+int suart_purge_rx_fifo( struct simple_uart_device *dev )
 {
 	uint32_t r = readl( dev->base + UART_REG_CR );
 	writel((r | UART_CR_RX_FIFO_PURGE), dev->base + UART_REG_CR );
