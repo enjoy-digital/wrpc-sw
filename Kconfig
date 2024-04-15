@@ -745,6 +745,17 @@ config CMD_PTP_RT
 	  --egress
 	  --ingress
 
+config CMD_TIME_MONITOR
+	depends on WR_NODE
+	boolean "Add 'time monitor' command to tightly monitor the current node time"
+	default n
+	help
+	  Adds a "monitor" parameter to the time command to print the current time
+	  in seconds. The current time is polled continously and therefore the
+	  printed value updates right as it changes in hardware, as opposed to the
+	  output of the gui command, which is updated on other events. Debug command,
+	  blocks execution of everything else.
+
 config CMD_NETCONSOLE
 	depends on NETCONSOLE
 	boolean "Add 'netconsole' command to configure netconsole"
