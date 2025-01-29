@@ -34,6 +34,11 @@ struct spll_main_state {
 	int tag_out_interp;
 #endif
 
+#ifdef CONFIG_LOCKSWEEP
+	int locksweep_interrupt_cycles; /* Amount of IRQs (time) locksweep takes control over the DAC */
+#endif
+
+	int pi_output;
 	int dref_dt, dout_dt, tag_ref_raw_d, tag_out_raw_d2;
 	int freq_prelock_gain_boost;
 	int discard_early_cnt;

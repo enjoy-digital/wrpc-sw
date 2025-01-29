@@ -273,7 +273,7 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 	if(!s->enabled)
 		return;
 
-	int err, y;
+	int err;
 
 	if (source == s->id_ref)
 	{
@@ -375,6 +375,22 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 
 	if (s->tag_ref >= 0 && s->tag_out >= 0) {
 		/* If there are both ref and out tags, ... */
+#ifdef CONFIG_LOCKSWEEP
+		if((s->locksweep_interrupt_cycles--) > 0)
+		{
+			if(!(s->vco_freeze))
+			{
+				SPLL->DAC_MAIN = SPLL_DAC_MAIN_VALUE_W(s->pi.y)
+					| SPLL_DAC_MAIN_DAC_SEL_W(s->dac_index);
+			}
+
+			// discard both tags. much necessary to keep the interval steady.
+			s->tag_out = -1;
+			s->tag_ref = -1;
+			return;
+		}
+#endif
+
 #ifndef CONFIG_FRAC_SPLL
 		if (s->discard_early_cnt == 1) {
 			int adj_ref = s->tag_ref + s->adder_ref;
@@ -439,15 +455,17 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 
 #endif
 
-		y = pi_update((spll_pi_t *)&s->pi, err);
+		s->pi_output = pi_update((spll_pi_t *)&s->pi, err);
+		
 		if(!s->vco_freeze)
 		{
-			SPLL->DAC_MAIN = SPLL_DAC_MAIN_VALUE_W(y)
+			SPLL->DAC_MAIN = SPLL_DAC_MAIN_VALUE_W(s->pi_output)
 				| SPLL_DAC_MAIN_DAC_SEL_W(s->dac_index);
+			
 		}
 
 		if (s->dac_index == 0)
-			spll_log_dac(y);
+			spll_log_dac(s->pi_output);
 
 		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_PHASE_CURRENT, s->phase_shift_current, 0);
 		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_PHASE_TARGET, s->phase_shift_target, 0);
@@ -456,7 +474,7 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_TAG, s->dout_dt, 0);
 		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_ERR, err, 0);
 		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_SAMPLE_ID, s->sample_n++, 0);
-		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_Y, y, 1);
+		spll_debug(s->dbg_src_id, SPLL_DBG_SIGNAL_Y, s->pi_output, 1);
 
 		/* Wait for both out and ref tags */
 		s->tag_out = -1;
