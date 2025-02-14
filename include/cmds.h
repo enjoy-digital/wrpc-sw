@@ -50,6 +50,9 @@ WRC_COMMAND(calibration)
 #ifdef CONFIG_FREQUENCY_MONITOR
   WRC_COMMAND(freqmon)
 #endif
+#ifdef CONFIG_GNSS
+  WRC_COMMAND(gnss)
+#endif
 WRC_COMMAND(gui)
 WRC_COMMAND(init)
 #ifdef CONFIG_IP

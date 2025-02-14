@@ -65,6 +65,8 @@ obj-$(CONFIG_LPDC_GTHE4) += dev/lpdc_gthe4.o
 
 obj-$(CONFIG_ZYNQUS_TEMP) += dev/zynqus/temp-sysmon.o
 
+obj-$(CONFIG_GNSS) += dev/gnss_time.o
+
 # board specific dev
 obj-$(CONFIG_TARGET_GENERIC_PHY_8BIT) += \
 

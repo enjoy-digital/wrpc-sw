@@ -21,12 +21,6 @@
 #include "util.h"
 #include "dev/simple_uart.h"
 
-#ifdef CONFIG_GNSS
-	#define HAS_GNSS 1
-#else
-	#define HAS_GNSS 0
-#endif
-
 /**
  * @brief gnss device interface struct type with a generic interface; function
  * pointers are set depending on selected device interface

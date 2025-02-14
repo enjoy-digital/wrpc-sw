@@ -24,7 +24,7 @@
 #include "util.h"
 #include "wrc.h"
 #include "wrpc.h"
-
+#include "cmds.h"
 
 static const char * const gnss_cmds[] = {
 	[0] = "status",
@@ -54,7 +54,7 @@ static int gnss_status(void)
 	return 0;
 }
 
-static int cmd_gnss(const char *args[])
+int cmd_gnss(const char *args[])
 {
 	int icmd;
 	icmd = sub_cmd(gnss_cmds, ARRAY_SIZE(gnss_cmds), args);
@@ -71,8 +71,3 @@ static int cmd_gnss(const char *args[])
 	}
 	return 0;
 }
-
-DEFINE_WRC_COMMAND(gnss) = {
-	.name = "gnss",
-	.exec = cmd_gnss,
-};
