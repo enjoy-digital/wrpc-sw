@@ -543,6 +543,87 @@ config W1_EEPROM
 	help
 	  Add support for eeprom on W1 bus. Adds w1r and w1w commands.
 
+config GNSS
+	boolean "Add support for GNSS modules"
+	default n
+	help
+	  This option addds support for a GNSS module as source for time and date,
+	  PPS and external reference clock when operating in grandmaster mode.
+	  Adds the "gnss" commands.
+
+menu "GNSS configuration"
+	depends on GNSS
+
+choice
+	prompt "GNSS module"
+	depends on GNSS
+	default GNSS_GENERIC
+	help
+	  Select the type of GNSS module, which may be relevant for initial
+	  configuration. Interface properties (e.g. UART baudrate) must be
+	  configured manually!
+
+config GNSS_GENERIC
+	bool "generic GNSS module"
+	help
+	  Select a generic GNSS module. If necessary, use "GNSS configuration data"
+	  to configure the module to output NMEA RMC and GGA sentences and a PPS signal.
+
+config GNSS_UBLOX_LEA_M8F
+	bool "u-blox LEA-M8F"
+	help
+	  The u-blox LEA-M8F module.
+
+endchoice
+
+config GNSS_CFG_DATA
+	string "Enter configuration byte string (hex)"
+	default ""
+	help
+	  Enter a byte string that is sent to the GNSS module on startup in order to
+	  configure it for operation. Each byte must be represented by a two digit
+	  hexadecimal number without any whitespaces or separators. This setting
+	  allows configuring up any modules that don't exist as a preset in the
+	  "GNSS module" option (choose "generic GNSS module"). For any modules
+	  existing as a preset, this string is sent after the hardcoded
+	  configuration data.
+
+choice
+	prompt "GNSS interface"
+	depends on GNSS
+	default GNSS_INTF_UART
+	help
+	  Select the interface type of the GNSS module.
+
+config GNSS_INTF_UART
+	bool "UART"
+	help
+	  Select UART as GNSS interface (requires a secondary UART device to
+          be added to the gateware design).
+
+# other interface types such as I2C could be added here
+
+endchoice
+
+config GNSS_UART_BAUDRATE
+	int "UART baud rate"
+	depends on GNSS_INTF_UART
+	default 115200
+	help
+	  Configure the baud rate used by the GNSS UART interface.
+
+config GNSS_RECENT_UTC_TIMESTAMP
+	int "Recent UTC timestamp"
+	default 1711922400 # 01-04-2024 00:00:00
+	help
+	  Set a recent Unix timestamp that is in the past. Some GNSS modules may
+	  report invalid date/time information despite having achieved fix. If
+	  the reported value is not greater than the provided recent timestamp,
+	  it is considered implausible (unless time travel is involved) and will
+	  be discarded.
+
+endmenu
+
 comment "commands"
 
 config EXTENDED_CLI
