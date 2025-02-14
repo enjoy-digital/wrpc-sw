@@ -19,6 +19,9 @@ extern unsigned long long __umoddi3 (unsigned long long A, unsigned long long B)
 
 #define 	EPOCH_YR   1970
 #define 	SECS_DAY   (24L * 60L * 60L)
+#define 	SECS_HOUR  (60L * 60L)
+#define 	SECS_MIN   (60L)
+
 #if 0
 /* The full and correct definition */
 #define 	LEAPYEAR(year)   (!((year) % 4) && (((year) % 100) || !((year) % 400)))
@@ -27,7 +30,10 @@ extern unsigned long long __umoddi3 (unsigned long long A, unsigned long long B)
 #define 	LEAPYEAR(year)   (!((year) % 4))
 #endif
 
-#define 	YEARSIZE(year)   (LEAPYEAR(year) ? 366 : 365)
+#define 	DAYS_YEAR_REGULAR 365
+#define 	DAYS_YEAR_LEAP 366
+
+#define 	YEARSIZE(year)   (LEAPYEAR(year) ? DAYS_YEAR_LEAP : DAYS_YEAR_REGULAR)
 #define 	FIRSTSUNDAY(timp)   (((timp)->tm_yday - (timp)->tm_wday + 420) % 7)
 #define 	FIRSTDAYOF(timp)   (((timp)->tm_wday - (timp)->tm_yday + 420) % 7)
 #define 	TIME_MAX   ULONG_MAX
@@ -50,17 +56,7 @@ static const unsigned char _ytab[2][12] = {
 	{31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
 };
 
-/* Like struct tm (from time.h), but we don't depend on the header. */
-struct time_m {
-	unsigned tm_sec;
-	unsigned tm_min;
-	unsigned tm_hour;
-	
-	unsigned tm_wday;
-	unsigned tm_mday;
-	unsigned tm_mon;
-	unsigned tm_year; /* Year from 0 to 9999 */
-};
+static const int days_until_month[12] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
 
 char *format_time(uint64_t sec, int format)
 {
@@ -146,6 +142,34 @@ int format_time_int(uint64_t sec_in, int *year, int *month, int *day, int *hour,
 	*sbs   = (int)dayclock;
 
 	return 0;
+}
+
+/* Correct from 1901 to 2099. */
+int64_t utc_datetime_to_seconds(struct time_m datetime)
+{
+
+	// calculate days since 1/1/1970
+	int days = (datetime.tm_year - EPOCH_YR) * DAYS_YEAR_REGULAR;
+
+	// add a leap day for every leap year that has passed since 1970
+	days += (datetime.tm_year - (EPOCH_YR - 1)) / 4;
+	// if current year is a leap year and we're past february, add another leap day
+	if (LEAPYEAR(datetime.tm_year) && (datetime.tm_mon > 2)) {
+		days += 1;
+	}
+
+	// add days leading up to current month
+	days += days_until_month[datetime.tm_mon - 1];
+	// add days between 1st of month and current day
+	days += datetime.tm_mday - 1;
+
+	int64_t seconds;
+	seconds = days * SECS_DAY;
+	seconds += datetime.tm_hour * SECS_HOUR;
+	seconds += datetime.tm_min * SECS_MIN;
+	seconds += datetime.tm_sec;
+
+	return seconds;
 }
 
 void cprintf(int color, const char *fmt, ...)
@@ -355,7 +379,11 @@ long long __divdi3 (long long A, long long B)
  * modulo function from the standard library */
 unsigned long long __umoddi3 (unsigned long long A, unsigned long long B)
 {
-	uint64_t x = A/B;
+	/* BUG: If we do A/B directly, when optimization are enable, the compiler
+	   detects that we are trying to perform a modulo operation and optimizes it
+	   by calling this function, which results in an infinite recursion.
+	   To avoid that, we need volatile */
+	volatile uint64_t x = A/B;
 	return A - (x)*B;
 }
 
