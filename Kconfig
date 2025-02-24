@@ -612,6 +612,13 @@ config GNSS_UART_BAUDRATE
 	help
 	  Configure the baud rate used by the GNSS UART interface.
 
+config GNSS_UART_RX_FIFO_SIZE
+	int "UART RX FIFO SIZE in gateware"
+	depends on GNSS_INTF_UART
+	default 1024
+	help
+	  Configure the RX FIFO size of the GNSS UART component.
+
 config GNSS_RECENT_UTC_TIMESTAMP
 	int "Recent UTC timestamp"
 	default 1711922400 # 01-04-2024 00:00:00

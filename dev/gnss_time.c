@@ -40,8 +40,6 @@
 /* -------------------------------------------------------------------------- */
 #define GNSS_FIX_TIMEOUT_MS     2000
 
-#define UART_RX_BUFFER_SIZE     1024 // must match gateware!
-
 static struct gnss_device gnss_dev;
 static struct simple_uart_device gnss_uart_dev;
 
@@ -276,7 +274,7 @@ int gnss_poll(void)
 	// Check if RX hardware buffer is completely full - if so, recent data may
 	// have been dropped. Purge both hardware and software buffer to avoid
 	// parsing outdated information.
-	if (gnss_dev.poll_rx_buffer() == UART_RX_BUFFER_SIZE) {
+	if (gnss_dev.poll_rx_buffer() == CONFIG_GNSS_UART_RX_FIFO_SIZE) {
 		gnss_dev.clear_rx_buffer();
 		parser_state = NMEA_WAIT_DELIM_START;
 
