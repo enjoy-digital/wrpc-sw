@@ -53,8 +53,7 @@ int wrc_board_init()
 	/* 2. Try reading from configuration EEPROM */
 	} else if (storage_get_persistent_mac(0, mac_addr) == -1) {
 	/* 3. If everything fails, use default MAC */
-		board_dbg("Failed to get MAC address from Unique ID chip or EEPROM. \
-				Using fallback address.\n");
+		board_dbg("Failed to get MAC address from Unique ID chip or EEPROM. Using fallback.\n");
 		mac_addr[0] = 0x22;
 		mac_addr[1] = 0x33;
 		mac_addr[2] = 0x44;
