@@ -38,6 +38,10 @@ static const char * const ep_cmds[] =
 	 [1] = "rd",
 	 [2] = "autoneg",
 	 [3] = "stat",
+	 [4] = "tx",
+	 [5] = "reset",
+	 [6] = "pd",
+	 [7] = "en",
 };
 
 int cmd_ep(const char *args[])
@@ -84,6 +88,30 @@ int cmd_ep(const char *args[])
 		pp_printf("ready:   %u\n", (dsr & EP_DSR_GTREADY));
 		pp_printf("rx sync: %u\n", (dsr & EP_DSR_RXSYNC));
 		pp_printf("link ok: %u\n", (dsr & EP_DSR_LSTATUS));
+		return 0;
+	}
+	case 4: {
+		unsigned en;
+		en =  (args[1] == NULL || atoi(args[1]) != 0);
+		ep_sfp_enable(dev, en);
+		return 0;
+	}
+	case 5:
+		/* First reset the endpoint to unsynchronize */
+		ep_pcs_write(dev, EP_MDIO_MCR, EP_MDIO_MCR_RESET);
+		usleep(10);
+		/* Then the GT.  This will also stop the clocks */
+		ep_pcs_write(dev, EP_MDIO_MCR, EP_MDIO_MCR_PDOWN);
+		return 0;
+	case 6:
+		ep_write(dev, EP_REG_ECR, 0);
+		ep_pcs_write(dev, EP_MDIO_MCR,
+			     EP_MDIO_MCR_PDOWN | EP_MDIO_MCR_RESET);
+		return 0;
+	case 7: {
+		unsigned en;
+		en = (args[1] == NULL || atoi(args[1]) != 0);
+		ep_enable(dev, en, 1);
 		return 0;
 	}
 	default:
