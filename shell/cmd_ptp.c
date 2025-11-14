@@ -85,6 +85,10 @@ static const struct subcmd {
 	{"tsource",  wrc_ptp_set_time_source, USE_CMD_PARAM},
 # endif
 #endif
+#ifdef CONFIG_CMD_PTP_RT
+	{"egress", wrc_ptp_set_time_source_rt_egress, USE_CMD_PARAM},
+	{"ingress", wrc_ptp_set_time_source_rt_ingress, USE_CMD_PARAM},
+#endif
 #ifdef CONFIG_ABSCAL
 	{"abscal", wrc_ptp_set_mode, WRC_MODE_ABSCAL},
 #endif

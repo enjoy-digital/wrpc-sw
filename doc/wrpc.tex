@@ -2284,7 +2284,7 @@ the build of WRPC.
   this process, which is described in
   \url{https://gitlab.com/ohwr/project/wr-calibration/wikis}.
 
-\item[ptp <prio1|prio2|domain|class|accuracy|allan|tsource> <val>] \mbox{}
+\item[ptp <accuracy|allan|class|domain|egress|ingress|prio1|prio2|tsource> <val>] \mbox{}
 
   Sets various parametes of PTP. For details see below.  Use these
   subcommands with caution. Setting the mode with \texttt{ptp} command
@@ -2318,6 +2318,16 @@ the build of WRPC.
 \item[ptp tsource <0-255>] \mbox{}
 
   Sets \textit{time source} used by PTP.
+
+\item[ptp egress <int>] \mbox{}
+
+  Sets in runtime \textit{Slave PHY delay TX} used by PTP.
+  If the change is small enough servo will stay in TRACK_PHASE.
+
+\item[ptp egress <int>] \mbox{}
+
+  Sets in runtime \textit{Slave PHY delay RX} used by PTP.
+  If the change is small enough servo will stay in TRACK_PHASE.
 
 \item[ptp start] \mbox{}
 
