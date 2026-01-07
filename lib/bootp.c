@@ -10,6 +10,7 @@
 #include <wrc.h>
 #include "endianness.h"
 #include "dev/endpoint.h"
+#include "dev/etherbone.h"
 #include "wrc_global.h"
 #include "ipv4.h"
 
@@ -94,6 +95,9 @@ int process_bootp(uint8_t * buf, int len)
 	setIP(buf + BOOTP_YIADDR);
 
 	getIP(ip);
+#if HAS_EB
+	eb_setIP(ip);
+#endif
 	pp_printf("Discovered IP address (%d.%d.%d.%d)!\n",
 	        ip[0], ip[1], ip[2], ip[3]);
 
