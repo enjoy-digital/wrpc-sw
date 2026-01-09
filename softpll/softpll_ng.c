@@ -296,6 +296,7 @@ void spll_very_init(void)
 
 	helper_very_init((struct spll_helper_state *) &softpll.helper); // set up default PI gains/lock thresholds
 
+	init_irq();
 }
 
 void spll_init(int mode, int slave_ref_channel, int flags)

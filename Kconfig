@@ -14,6 +14,11 @@ config ARCH_RISCV
 	help
 	  Use riscV
 
+config ARCH_ARM_R5
+	bool "ARM-R5"
+	help
+	  Use ARM Cortex R5 (ZynqUS+ RPU)
+
 endchoice
 
 config RISCV_COMP_INSTR
@@ -155,6 +160,7 @@ config RAMSIZE
 	default 65536 if TARGET_WR_SWITCH
 	default 196608 if TARGET_ERTM14
 	default 131072 if ARCH_RISCV
+	default 131072 if ARCH_ARM_R5
 	default 147456
 
 config TEMP_POLL_INTERVAL
@@ -199,7 +205,7 @@ config HOST_PROCESS
 
 config EMBEDDED_NODE
 	boolean
-	default (ARCH_LM32 || ARCH_RISCV) && WR_NODE
+	default (ARCH_LM32 || ARCH_RISCV || ARCH_ARM_R5) && WR_NODE
 
 # CONFIG_WR_SWITCH has no further options at all at this point
 
@@ -790,6 +796,7 @@ config CUSTOM_RAMSIZE
 	default 65536 if TARGET_WR_SWITCH
 	default 196608 if TARGET_ERTM14
 	default 131072 if ARCH_RISCV
+	default 131072 if ARCH_ARM_R5
 	default 196608
 	help
 	  The usual configuration for wrpc-sw is 0x16000 bytes
