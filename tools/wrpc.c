@@ -2708,6 +2708,17 @@ struct gdb_packet {
 	size_t size;
 };
 
+static void gdb_packet_put_str(struct gdb_packet *out, const char *msg)
+{
+	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX, "%s", msg);
+}
+
+struct dbg_port;
+
+typedef int (gdb_command_t)(struct dbg_port *dbg,
+                            struct gdb_packet *out,
+                            struct gdb_packet *in);
+
 /**
  * struct dbg_port - descriptor to handle connection
  * @addr: Mock Turtle virtual address
@@ -2715,15 +2726,22 @@ struct gdb_packet {
  * @fd: socket file descriptor
  */
 struct dbg_port {
-	/* For debug */
+	/* Cpu index */
 	uint8_t cpu;
+	/* The fd for the stub socket */
 	int fd;
+	/* Set if -t (terminal) option was present */
         unsigned flag_term;
-};
 
-typedef int (gdb_command_t)(struct dbg_port *dbg,
-                            struct gdb_packet *out,
-                            struct gdb_packet *in);
+	/* Debug access port */
+	void *dap;
+
+	gdb_command_t * const *cmds;
+	size_t n_cmds;
+
+	/* If not NULL, called after connect to stop the target */
+	int (*post_connect_hook)(struct dbg_port *dbg);
+};
 
 /**
  * Read value from the Debug Port
@@ -2966,6 +2984,61 @@ static void dbg_urv_pc_advance_4(struct dbg_port *dbg)
 	dbg_urv_exec_nop(dbg);
 }
 
+static void gdb_maybe_read_term(struct dbg_port *dbg)
+{
+	if (dbg->flag_term) {
+		while (1) {
+			int rx = wr_vuart_rx(board);
+			if (rx < 0)
+				break;
+			putchar(rx);
+		}
+		fflush(stdout);
+	}
+}
+
+static int gdb_maybe_stop(struct dbg_port *dbg)
+{
+	int ret;
+	struct pollfd p[2];
+
+	p[0].fd = dbg->fd;
+	p[0].events = POLLIN;
+	p[0].revents = 0;
+
+	if (dbg->flag_term) {
+		p[1].fd = 0;
+		p[1].events = POLLIN;
+		p[1].revents = 0;
+		ret = poll(p, 2, 100);
+	}
+	else
+		ret = poll(p, 1, 1000);
+
+	if (ret == 0) {
+		/* Timeout, continue */
+		return 0;
+	}
+
+	if (ret < 0) {
+		/* Error: connection closed ? */
+		return -1;
+	}
+
+	if (dbg->flag_term && (p[1].revents & POLLIN)) {
+		/* From stdin to cpu */
+		char c;
+		if (read(0, &c, 1) == 1)
+			wr_vuart_tx(board, c);
+	}
+
+	if (p[0].revents & POLLIN) {
+		return 1;
+	}
+
+	return 0;
+}
+
 /**
  * Continue command
  */
@@ -2981,18 +3054,9 @@ static int gdb_urv_handle_c(struct dbg_port *dbg,
 	dbg_urv_exec_insn(dbg, 0x00100073); /* ebreak */
 	while (1) {
 		int ret;
-		struct pollfd p[2];
 
 		/* Dump vuart. */
-		if (dbg->flag_term) {
-			while (1) {
-				int rx = wr_vuart_rx(board);
-				if (rx < 0)
-					break;
-				putchar(rx);
-			}
-			fflush(stdout);
-		}
+		gdb_maybe_read_term(dbg);
 
 		if (dbg_urv_in_debug_mode(dbg)) {
 			/*
@@ -3000,46 +3064,23 @@ static int gdb_urv_handle_c(struct dbg_port *dbg,
 			 * race if the ebreak is not yet executed
 			 */
 			if (dbg_urv_in_debug_mode(dbg)) {
-				out->size = snprintf(out->data,
-						     GDB_PACKET_SIZE_MAX,
-						     "S05");
+				gdb_packet_put_str(out, "S05");
 				break;
 			}
 		}
 
-		p[0].fd = dbg->fd;
-		p[0].events = POLLIN;
-		p[0].revents = 0;
-
-		if (dbg->flag_term) {
-			p[1].fd = 0;
-			p[1].events = POLLIN;
-			p[1].revents = 0;
-			ret = poll(p, 2, 100);
-		}
-		else
-			ret = poll(p, 1, 1000);
-
+		ret = gdb_maybe_stop(dbg);
+		if (ret < 0)
+			return ret;
 		if (ret == 0)
 			continue;
-		if (ret < 0)
-			break;
 
-		if (dbg->flag_term && (p[1].revents & POLLIN)) {
-			char c;
-			if (read(0, &c, 1) == 1)
-				wr_vuart_tx(board, c);
-		}
-		if (p[0].revents & POLLIN) {
-			/* GDB wants something from us */
-			ret = dbg_urv_debug_mode_force_set(dbg);
-			if (ret < 0)
-				fprintf(stderr, "Failed to set debug mode\n");
-			out->size = snprintf(out->data,
-					     GDB_PACKET_SIZE_MAX,
-					     "S02");
-			break;
-		}
+		/* GDB wants something from us */
+		ret = dbg_urv_debug_mode_force_set(dbg);
+		if (ret < 0)
+			fprintf(stderr, "Failed to set debug mode\n");
+		gdb_packet_put_str(out, "S02");
+		break;
 	}
 
 	return 0;
@@ -3053,9 +3094,22 @@ static int gdb_urv_handle_D(struct dbg_port *dbg,
 			    struct gdb_packet *in)
 {
 	dbg_urv_exec_insn(dbg, 0x00100073); /* ebreak */
-	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX, "OK");
+	gdb_packet_put_str(out, "OK");
 
 	return 0;
+}
+
+static void gdb_packet_append_x32(struct gdb_packet *out, uint32_t v)
+{
+	out->size += snprintf(out->data + out->size,
+			      GDB_PACKET_SIZE_MAX,
+			      "%08"PRIx32, v);
+}
+
+static void gdb_packet_append_x8(struct gdb_packet *out, unsigned char v)
+{
+	out->size += snprintf(out->data + out->size,
+			      GDB_PACKET_SIZE_MAX, "%02x", v);
 }
 
 /**
@@ -3071,14 +3125,10 @@ static int gdb_urv_handle_g(struct dbg_port *dbg,
 	out->size = 0;
 	for (i = 0; i < 32; ++i) {
 		regs[i] = dbg_urv_read_reg(dbg, i);
-		out->size += snprintf(out->data + out->size,
-				      GDB_PACKET_SIZE_MAX,
-				      "%08"PRIx32, htonl(regs[i]));
+		gdb_packet_append_x32(out, htonl(regs[i]));
 	}
 	pc = dbg_urv_pc_read_via_ra(dbg);
-	out->size += snprintf(out->data + out->size,
-			      GDB_PACKET_SIZE_MAX,
-			      "%08"PRIx32, htonl(pc));
+	gdb_packet_append_x32(out, htonl(pc));
 	dbg_urv_write_reg(dbg, 1, regs[1]);
 
 	return 0;
@@ -3095,8 +3145,7 @@ static int gdb_urv_handle_G(struct dbg_port *dbg,
 	int i;
 
 	if (in->size != (1 + 33 * 8)) {
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E01");
+		gdb_packet_put_str(out, "E01");
 		return 0;
 	}
 
@@ -3104,9 +3153,7 @@ static int gdb_urv_handle_G(struct dbg_port *dbg,
 		int ret = sscanf(in->data + 1 + i * 8, "%08"SCNx32, &regs[i]);
 
 		if (ret != 1) {
-			out->size = snprintf(out->data,
-					     GDB_PACKET_SIZE_MAX,
-					     "E02");
+			gdb_packet_put_str(out, "E02");
 			return 0;
 		}
 	}
@@ -3117,8 +3164,7 @@ static int gdb_urv_handle_G(struct dbg_port *dbg,
 
 	for (i = 1; i < 32; ++i)
 		dbg_urv_write_reg(dbg, i, ntohl(regs[i]));
-	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-			     "OK");
+	gdb_packet_put_str(out, "OK");
 
 	return 0;
 }
@@ -3129,13 +3175,12 @@ static int gdb_urv_handle_G(struct dbg_port *dbg,
  * Partially supported
  */
 static int gdb_handle_H(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+			struct gdb_packet *out,
+			struct gdb_packet *in)
 {
 	/* we just want to keep GDB quiet */
 	if (strncmp(in->data, "Hg0", 3) == 0)
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "OK");
+		gdb_packet_put_str(out, "OK");
 	else
 		out->size = 0;
 
@@ -3171,21 +3216,18 @@ static int gdb_urv_handle_M(struct dbg_port *dbg,
 
 	indata = strchr(in->data, ':');
 	if (!indata) {
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E01");
+		gdb_packet_put_str(out, "E01");
 		return 0;
 	}
 	indata++; /* skip ':' */
 	ret = sscanf(in->data + 1, "%"SCNx32",%"SCNx32":", &addr, &n);
 	if (ret != 2) {
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E02");
+		gdb_packet_put_str(out, "E02");
 		return 0;
 	}
 
 	if (n * 2 != in->size - (indata - in->data)) {
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E03");
+		gdb_packet_put_str(out, "E03");
 		return 0;
 	}
 
@@ -3224,11 +3266,9 @@ static int gdb_urv_handle_M(struct dbg_port *dbg,
 	dbg_urv_write_reg(dbg, 11, a1);
 
 	if (n > 0)
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E04");
+		gdb_packet_put_str(out, "E04");
 	else
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "OK");
+		gdb_packet_put_str(out, "OK");
 
 	return 0;
 }
@@ -3246,8 +3286,7 @@ static int gdb_urv_handle_m(struct dbg_port *dbg,
 
 	ret = sscanf(in->data + 1, "%x,%x", &addr, &n);
 	if (ret != 2) {
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E01");
+		gdb_packet_put_str(out, "E01");
 		return 0;
 	}
 	a0 = dbg_urv_read_reg(dbg, 10);
@@ -3292,8 +3331,7 @@ static int gdb_urv_handle_p(struct dbg_port *dbg,
 				     "%08x",
 				     (1 << 30) | (1 << ('I' - 65)));
 	else
-		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
-				     "E01");
+		gdb_packet_put_str(out, "E01");
 
 	return 0;
 }
@@ -3330,16 +3368,15 @@ static int gdb_handle_qm(struct dbg_port *dbg,
 			      struct gdb_packet *out,
 			      struct gdb_packet *in)
 {
+	/* Status: stopped */
 	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX, "S05");
 
 	return 0;
 }
 
-static int gdb_urv_handle_qRcmd(struct dbg_port *dbg,
-				struct gdb_packet *out,
-				struct gdb_packet *in)
+/* BUF length should be GDB_PACKET_SIZE_MAX / 2 */
+static int gdb_qRcmd_decode(char *buf, struct gdb_packet *in)
 {
-	char buf[GDB_PACKET_SIZE_MAX / 2];
 	unsigned len;
 
 	/* Decode hex input (convert to bytes). 6 is the prefix 'qRcmd,' */
@@ -3348,13 +3385,34 @@ static int gdb_urv_handle_qRcmd(struct dbg_port *dbg,
 		int ret;
 
 		ret = sscanf(in->data + 6 + len * 2, "%02x", &val);
-		if (ret != 1) {
-			out->size = 0;
-			return 0;
-		}
+		if (ret != 1)
+			return -1;
 		buf[len] = val;
 	}
 	buf[len] = 0;
+	return 0;
+}
+
+static void gdb_qRcmd_encode(char *buf, struct gdb_packet *out)
+{
+	unsigned len;
+
+	/* Encode to hex.  */
+	for (len = 0; buf[len]; len++)
+		sprintf(out->data + len * 2, "%02x", buf[len]);
+	out->size = len * 2;
+}
+
+static int gdb_urv_handle_qRcmd(struct dbg_port *dbg,
+				struct gdb_packet *out,
+				struct gdb_packet *in)
+{
+	char buf[GDB_PACKET_SIZE_MAX / 2];
+
+	if (gdb_qRcmd_decode(buf, in) < 0) {
+		out->size = 0;
+		return 0;
+	}
 
 	if (strcmp(buf, "help") == 0) {
 		strcpy(buf, "usage: csr | reset | port | help\n");
@@ -3398,13 +3456,12 @@ static int gdb_urv_handle_qRcmd(struct dbg_port *dbg,
 	}
 
 	/* Encode to hex.  */
-	for (len = 0; buf[len]; len++)
-		sprintf(out->data + len * 2, "%02x", buf[len]);
-	out->size = len * 2;
+	gdb_qRcmd_encode(buf, out);
 	return 0;
 }
 
-static int gdb_urv_handle_q(struct dbg_port *dbg,
+/* Generic handling of 'q*' commands */
+static int gdb_handle_q(struct dbg_port *dbg,
 			    struct gdb_packet *out,
 			    struct gdb_packet *in)
 {
@@ -3412,11 +3469,18 @@ static int gdb_urv_handle_q(struct dbg_port *dbg,
 		return gdb_handle_q_supported(dbg, out, in);
 	else if (strncmp(in->data, "qm", 2) == 0)
 		return gdb_handle_qm(dbg, out, in);
-	else if (strncmp(in->data, "qRcmd,", 6) == 0)
-		return gdb_urv_handle_qRcmd(dbg, out, in);
 	out->size = 0;
 
 	return 0;
+}
+
+static int gdb_urv_handle_q(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
+{
+	if (strncmp(in->data, "qRcmd,", 6) == 0)
+		return gdb_urv_handle_qRcmd(dbg, out, in);
+	return gdb_handle_q(dbg, out, in);
 }
 
 /**
@@ -3555,15 +3619,15 @@ static int gdb_handle_v(struct dbg_port *dbg,
  * Not supported yet
  */
 static int gdb_handle_X(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+			struct gdb_packet *out,
+			struct gdb_packet *in)
 {
 	out->size = 0;
 
 	return 0;
 }
 
-static gdb_command_t * const gdb_urv_packet_exec[] = {
+static gdb_command_t * const gdb_urv_commands[] = {
 	['c'] = gdb_urv_handle_c,
 	['D'] = gdb_urv_handle_D,
 	['g'] = gdb_urv_handle_g,
@@ -3602,15 +3666,16 @@ static int gdb_command(struct dbg_port *dbg,
 	if (in->size == 0)
 		return -1;
 
-	exec = gdb_urv_packet_exec[cmd];
-	if (exec)
-		return exec(dbg, out, in);
+	if (cmd < dbg->n_cmds) {
+		exec = dbg->cmds[cmd];
+		if (exec)
+			return exec(dbg, out, in);
+	}
 	out->size = 0;
 	return 0;
 }
 
-static void debugger_print_packet(struct gdb_packet *pkt,
-				       const char *dir)
+static void debugger_print_packet(struct gdb_packet *pkt, const char *dir)
 {
 	int i, start, end;
 
@@ -3813,10 +3878,12 @@ static int debugger_run(struct dbg_port *dbg)
 	in = &pkt[0];
 	out = &pkt[1];
 
-	ret = dbg_urv_debug_mode_force_set(dbg);
-	if (ret < 0) {
-		fprintf(stderr, "Failed to set debug mode\n");
-		return -1;
+	if (dbg->post_connect_hook) {
+		ret = dbg->post_connect_hook(dbg);
+		if (ret < 0) {
+			fprintf(stderr, "Failed to set debug mode\n");
+			return -1;
+		}
 	}
 
 	fputs("Start receiving messages from GDB\n", stdout);
@@ -3851,33 +3918,19 @@ static int debugger_run(struct dbg_port *dbg)
 	return 0;
 }
 
-static void help_gdbserver(void)
-{
-	fprintf(stderr, "usage: %s gdbserver BOARD-OPTIONS [options]\n",
-		progname);
-	fprintf(stderr, " -p PORT       listen on tcp port PORT\n");
-	fprintf(stderr, " -v            verbose\n");
-	fprintf(stderr, " -t            enable terminal\n");
-	fprintf(stderr, " -k            keep connection\n");
-}
-
 #define MEMPATH_LEN 128
 
-static int do_gdbserver(int argc, char *argv[])
+static int gdb_server(struct dbg_port *dbg, int argc, char *argv[])
 {
 	int flag_keep = 0;
 	int gdb_port = 7471;
 	int c, ret, sfd, ret_exit = EXIT_SUCCESS, optval;
-	struct dbg_port dbg;
 	struct sockaddr_in server_addr;
 	struct sockaddr_in client_addr;
 	socklen_t client_len = sizeof(client_addr);
 
-        /* Decode board options and open the board. */
-        if (board_open(&argc, argv) < 0)
-          return 1;
+	dbg->flag_term = 0;
 
-	memset(&dbg, 0, sizeof(dbg));
 	while ((c = getopt(argc, argv, "p:vstk")) != -1) {
 		switch (c) {
 		case 'p':
@@ -3894,7 +3947,7 @@ static int do_gdbserver(int argc, char *argv[])
                         flag_keep = 1;
 			break;
 		case 't':
-			dbg.flag_term = 1;
+			dbg->flag_term = 1;
 			break;
 		case '?':
                         printf("%s: unknown option, try -h\n", argv[0]);
@@ -3940,9 +3993,9 @@ static int do_gdbserver(int argc, char *argv[])
 	do {
 		printf ("Waiting for connection on port %d\n", gdb_port);
 
-		dbg.fd = accept(sfd, (struct sockaddr *)&client_addr,
+		dbg->fd = accept(sfd, (struct sockaddr *)&client_addr,
 				&client_len);
-		if (dbg.fd < 0) {
+		if (dbg->fd < 0) {
 			fprintf(stderr, "Failed to accept: %s\n",
 				strerror(errno));
 			ret_exit = EXIT_FAILURE;
@@ -3951,7 +4004,7 @@ static int do_gdbserver(int argc, char *argv[])
 		fprintf(stdout, "Accepted connection from %s\n",
 			inet_ntoa(client_addr.sin_addr));
 
-		ret = debugger_run(&dbg);
+		ret = debugger_run(dbg);
 		if (ret < 0) {
 			ret_exit = EXIT_FAILURE;
                         break;
@@ -3961,8 +4014,36 @@ static int do_gdbserver(int argc, char *argv[])
 out_bind:
 out_sock:
 	close(sfd);
-        board->fini(board);
         return ret_exit;
+}
+
+static void help_gdbserver(void)
+{
+	fprintf(stderr, "usage: %s gdbserver BOARD-OPTIONS [options]\n",
+		progname);
+	fprintf(stderr, " -p PORT       listen on tcp port PORT\n");
+	fprintf(stderr, " -v            verbose\n");
+	fprintf(stderr, " -t            enable terminal\n");
+	fprintf(stderr, " -k            keep connection\n");
+}
+
+static int do_gdbserver(int argc, char *argv[])
+{
+	int ret;
+	struct dbg_port dbg;
+
+        /* Decode board options and open the board. */
+        if (board_open(&argc, argv) < 0)
+          return 1;
+
+	dbg.cmds = gdb_urv_commands;
+	dbg.n_cmds = sizeof(gdb_urv_commands) / sizeof(gdb_urv_commands[0]);
+	dbg.post_connect_hook = dbg_urv_debug_mode_force_set;
+
+	ret = gdb_server(&dbg, argc, argv);
+
+        board->fini(board);
+        return ret;
 }
 
 #ifndef SUPPORT_WRS
@@ -4297,7 +4378,2257 @@ static int do_aux_logger(int argc, char *argv[])
 	return 0;
 }
 
-#endif /* !defined(SUPPORT_WRS) */
+/**
+ * RPU Base Address
+ */
+#define RPU_BASEADDR      0xff9a0000u
+#define R5_DBG_0_BASEADDR 0xfebf0000u
+#define R5_DBG_1_BASEADDR 0xfebf2000u
+
+/**
+ * Register: RPU_RPU_GLBL_CNTL
+ */
+#define RPU_RPU_GLBL_CNTL    0x00000000u
+#define RPU_RPU_GLBL_CNTL_SLSPLIT_MASK    0x00000008u
+#define RPU_RPU_GLBL_CNTL_TCM_COMB_MASK   0x00000040u
+#define RPU_RPU_GLBL_CNTL_SLCLAMP_MASK    0x00000010u
+
+/**
+ * Register: RPU_RPU_0_CFG
+ */
+#define RPU_RPU_0_CFG    0X00000100U
+#define RPU_RPU_0_CFG_VINITHI_MASK     0x00000004U
+#define RPU_RPU_0_CFG_NCPUHALT_MASK    0X00000001U
+#define RPU_RPU_0_STATUS	0X00000104U
+
+/**
+ * Register: RPU_RPU_1_CFG
+ */
+#define RPU_RPU_1_CFG    0X00000200U
+#define RPU_RPU_1_CFG_VINITHI_MASK     0x00000004U
+#define RPU_RPU_1_CFG_NCPUHALT_MASK    0X00000001U
+#define RPU_RPU_1_STATUS	0X00000204U
+
+/**
+ * CRL_APB Base Address
+ */
+#define CRL_APB_BASEADDR      0xff5e0000u
+
+/**
+ * Register: CRL_APB_CPU_R5_CTRL
+ */
+#define CRL_APB_CPU_R5_CTRL    0X00000090U
+#define CRL_APB_CPU_R5_CTRL_CLKACT_MASK    0X01000000U
+
+/**
+ * Register: CRL_APB_RST_LPD_TOP
+ */
+#define CRL_APB_RST_LPD_TOP    0x0000023cU
+#define CRL_APB_RST_LPD_TOP_RPU_R50_RESET_MASK    0x00000001U
+#define CRL_APB_RST_LPD_TOP_RPU_AMBA_RESET_MASK   0x00000004U
+#define CRL_APB_RST_LPD_TOP_RPU_R51_RESET_MASK    0x00000002U
+
+/**
+ * PMU_GLOBAL Base Address
+ */
+#define PMU_GLOBAL_BASEADDR      0XFFD80000U
+
+/* Register: PMU_GLOBAL_REQ_PWRUP_INT_EN */
+#define PMU_GLOBAL_REQ_PWRUP_INT_EN    0X00000118U
+#define PMU_GLOBAL_REQ_PWRUP_INT_EN_PL_MASK    0X00800000U
+
+/* Register: PMU_GLOBAL_REQ_PWRUP_TRIG */
+#define PMU_GLOBAL_REQ_PWRUP_TRIG    0X00000120U
+#define PMU_GLOBAL_REQ_PWRUP_TRIG_PL_MASK    0X00800000U
+
+/* Register: PMU_GLOBAL_REQ_PWRUP_STATUS */
+#define PMU_GLOBAL_REQ_PWRUP_STATUS    0X00000110U
+#define PMU_GLOBAL_REQ_PWRUP_STATUS_PL_SHIFT   23U
+#define PMU_GLOBAL_REQ_PWRUP_STATUS_PL_MASK    0X00800000U
+
+/* Register: PMU_GLOBAL_PWR_STATE */
+#define PMU_GLOBAL_PWR_STATE    0X00000100U
+#define PMU_GLOBAL_PWR_STATE_PL_MASK  		0X00800000U
+#define PMU_GLOBAL_PWR_STATE_FP_MASK    	0X00400000U
+#define PMU_GLOBAL_PWR_STATE_USB1_MASK    	0X00200000U
+#define PMU_GLOBAL_PWR_STATE_USB0_MASK    	0X00100000U
+#define PMU_GLOBAL_PWR_STATE_OCM_BANK3_MASK    	0X00080000U
+#define PMU_GLOBAL_PWR_STATE_OCM_BANK2_MASK    	0X00040000U
+#define PMU_GLOBAL_PWR_STATE_OCM_BANK1_MASK    	0X00020000U
+#define PMU_GLOBAL_PWR_STATE_OCM_BANK0_MASK    	0X00010000U
+#define PMU_GLOBAL_PWR_STATE_TCM1B_MASK    	0X00008000U
+#define PMU_GLOBAL_PWR_STATE_TCM1A_MASK    	0X00004000U
+#define PMU_GLOBAL_PWR_STATE_TCM0B_MASK    	0X00002000U
+#define PMU_GLOBAL_PWR_STATE_TCM0A_MASK    	0X00001000U
+#define PMU_GLOBAL_PWR_STATE_R5_1_MASK    	0X00000800U
+#define PMU_GLOBAL_PWR_STATE_R5_0_MASK    	0X00000400U
+#define PMU_GLOBAL_PWR_STATE_L2_BANK0_MASK    	0X00000080U
+#define PMU_GLOBAL_PWR_STATE_PP1_MASK    	0X00000020U
+#define PMU_GLOBAL_PWR_STATE_PP0_MASK    	0X00000010U
+#define PMU_GLOBAL_PWR_STATE_ACPU3_MASK    	0X00000008U
+#define PMU_GLOBAL_PWR_STATE_ACPU2_MASK    	0X00000004U
+#define PMU_GLOBAL_PWR_STATE_ACPU1_MASK    	0X00000002U
+#define PMU_GLOBAL_PWR_STATE_ACPU0_MASK    	0X00000001U
+
+#define ATCM0_ADDRESS 0xFFE00000
+#define BTCM0_ADDRESS 0xFFE20000
+#define ATCM1_ADDRESS 0xFFE90000
+#define BTCM1_ADDRESS 0xFFEB0000
+#define OCM_ADDRESS 0xFFFC0000
+
+struct rpu_sram_map_t {
+	unsigned vaddr;
+	unsigned paddr;
+	unsigned len;
+};
+static const struct rpu_sram_map_t rpu_sram_map[] = {
+	{0x00000000, ATCM0_ADDRESS, 0x10000 },
+	{0x00020000, BTCM0_ADDRESS, 0x10000 },
+	{0xfffc0000, OCM_ADDRESS, 0x10000 },
+	{0x00000000, 0,0 },
+};
+
+struct rpu_load_data {
+	int devmem_fd;
+	unsigned char *map;
+	unsigned vaddr;
+	unsigned len;
+};
+
+static int elf_rpu_load_cb (void *data, unsigned char *buf,
+			    unsigned len, unsigned vaddr)
+{
+	struct rpu_load_data *d = (struct rpu_load_data *)data;
+
+	while (len > 0) {
+		if (vaddr < d->vaddr || vaddr >= d->vaddr + d->len) {
+			/* Not within the mapped area */
+			if (d->map != NULL)
+				munmap(d->map, d->len);
+			const struct rpu_sram_map_t *map;
+			for (map = rpu_sram_map; map->len; map++)
+				if (vaddr >= map->vaddr
+				    && vaddr < map->vaddr + map->len)
+					break;
+			if (map->len == 0) {
+				printf ("rpu load: no vaddr 0x%08x\n",
+					vaddr);
+				return -1;
+			}
+			d->map = mmap(NULL, map->len, PROT_READ | PROT_WRITE,
+				      MAP_SHARED, d->devmem_fd, map->paddr);
+			if (d->map == MAP_FAILED) {
+				printf("rpu load: cannot map 0x%08x: %m\n",
+				       map->paddr);
+				return -1;
+			}
+			d->vaddr = map->vaddr;
+			d->len = map->len;
+		}
+
+		printf("load at 0x%08x (up to 0x%08x)\n", vaddr, len);
+
+		while (len > 0 && vaddr < d->vaddr + d->len) {
+			d->map[vaddr - d->vaddr] = *buf++;
+			vaddr++;
+			len--;
+		}
+	}
+	return 0;
+}
+
+static int dump_tcm(int fd, unsigned addr)
+{
+	void *tcm;
+	tcm = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, addr);
+	if (tcm == MAP_FAILED) {
+		printf("cannot mmap tcm: %m\n");
+		return 0;
+	}
+	for (unsigned i = 0; i < 256; i += 4) {
+		if (i % 16 == 0)
+			printf("%08x:", i);
+		printf(" %08x", *(unsigned *)(tcm + i));
+		if (i % 16 == 12)
+			printf("\n");
+	}
+	munmap(tcm, 0x1000);
+	return 0;
+}
+
+static int clear_tcm(int fd, const struct rpu_sram_map_t *map)
+{
+	void *tcm;
+	volatile double *d;
+
+	tcm = mmap(NULL, map->len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, map->paddr);
+	if (tcm == MAP_FAILED) {
+		printf("cannot mmap tcm: %m\n");
+		return 0;
+	}
+
+	d = (volatile double *)tcm;
+	for (unsigned i = 0; i < map->len; i += sizeof(double))
+		d[i / sizeof(double)] = 0.0;
+	munmap(tcm, map->len);
+	return 0;
+}
+
+static int zynqmp_pm(const char *str)
+{
+	int fd;
+	static const char pm_file[] = "/sys/kernel/debug/zynqmp-firmware/pm";
+	size_t len = strlen(str);
+
+	fd = open(pm_file, O_WRONLY);
+	if (fd < 0) {
+		fprintf(stderr, "cannot open %s: %m\n", pm_file);
+		return -1;
+	}
+	if (write(fd, str, len) != len) {
+		fprintf(stderr, "cannot write string to %s: %m\n", pm_file);
+		close(fd);
+		return -1;
+	}
+	close(fd);
+	return 0;
+}
+
+static int zynqmp_init_rpu(int fd)
+{
+	/* configure RPU in split mode */
+	if (zynqmp_pm ("pm_ioctl 0 1 1 0\n") < 0)
+		return -1;
+	/* configure TCM in split mode */
+	if (zynqmp_pm ("pm_ioctl 0 3 0 0\n") < 0)
+		return -1;
+	/* set boot address */
+	if (zynqmp_pm ("pm_ioctl 7 2 0 0\n") < 0)
+		return -1;
+	/* power-up and un-reset RPU/TCM (but still halded) */
+	if (zynqmp_pm ("pm_request_node 15\n") < 0)
+		return -1;
+	if (zynqmp_pm ("pm_request_node 16\n") < 0)
+		return -1;
+	/* Clear ATCM and BTCM.  This is needed for ECC. */
+	clear_tcm(fd, &rpu_sram_map[0]);
+	clear_tcm(fd, &rpu_sram_map[1]);
+	return 0;
+}
+
+#define R5_DBG_DIDR	0x0000 // Debug ID register
+#define R5_DBG_WFAR	0x0018 // The Watchpoint Fault Address Register
+#define R5_DBG_VCR	0x001C // Vector Catch Register
+#define R5_DBG_DSCCR	0x0028 // Debug State Cache Control Register
+#define R5_DBG_DTRRXext	0x0080 // Read Data Transfer Register
+#define R5_DBG_ITR	0x0084 // Instruction Transfer Register
+#define R5_DBG_DSCRext	0x0088 // Debug Status and Control Register
+#define R5_DBG_DTRTXext	0x008C // Write Data Transfer Register
+#define R5_DBG_DRCR	0x0090 // Debug Run Control Register
+#define R5_DBG_BVR0	0x0100 // Breakpoint Value Register 0
+#define R5_DBG_BVR1	0x0104 // Breakpoint Value Register 1
+#define R5_DBG_BVR2	0x0108 // Breakpoint Value Register 2
+#define R5_DBG_BVR3	0x010C // Breakpoint Value Register 3
+#define R5_DBG_BVR4	0x0110 // Breakpoint Value Register 4
+#define R5_DBG_BVR5	0x0114 // Breakpoint Value Register 5
+#define R5_DBG_BVR6	0x0118 // Breakpoint Value Register 6
+#define R5_DBG_BVR7	0x011C // Breakpoint Value Register 7
+#define R5_DBG_BCR0	0x0140 // Breakpoint Control Register 0
+#define R5_DBG_BCR1	0x0144 // Breakpoint Control Register 1
+#define R5_DBG_BCR2	0x0148 // Breakpoint Control Register 2
+#define R5_DBG_BCR3	0x014C // Breakpoint Control Register 3
+#define R5_DBG_BCR4	0x0150 // Breakpoint Control Register 4
+#define R5_DBG_BCR5	0x0154 // Breakpoint Control Register 5
+#define R5_DBG_BCR6	0x0158 // Breakpoint Control Register 6
+#define R5_DBG_BCR7	0x015C // Breakpoint Control Register 7
+#define R5_DBG_WVR0	0x0180 // Watchpoint Value Register 0
+#define R5_DBG_WVR1	0x0184 // Watchpoint Value Register 1
+#define R5_DBG_WVR2	0x0188 // Watchpoint Value Register 2
+#define R5_DBG_WVR3	0x018C // Watchpoint Value Register 3
+#define R5_DBG_WVR4	0x0190 // Watchpoint Value Register 4
+#define R5_DBG_WVR5	0x0194 // Watchpoint Value Register 5
+#define R5_DBG_WVR6	0x0198 // Watchpoint Value Register 6
+#define R5_DBG_WVR7	0x019C // Watchpoint Value Register 7
+#define R5_DBG_WCR0	0x01C0 // Watchpoint Control Register 0
+#define R5_DBG_WCR1	0x01C4 // Watchpoint Control Register 1
+#define R5_DBG_WCR2	0x01C8 // Watchpoint Control Register 2
+#define R5_DBG_WCR3	0x01CC // Watchpoint Control Register 3
+#define R5_DBG_WCR4	0x01D0 // Watchpoint Control Register 4
+#define R5_DBG_WCR5	0x01D4 // Watchpoint Control Register 5
+#define R5_DBG_WCR6	0x01D8 // Watchpoint Control Register 6
+#define R5_DBG_WCR7	0x01DC // Watchpoint Control Register 7
+#define R5_DBG_OSLSR	0x0304 // Operating System Lock Status Register
+#define R5_DBG_PRCR	0x0310 // Device Powerdown and Reset Control Reg
+#define R5_DBG_PRSR	0x0314 // Device Powerdown and Reset Status Reg
+#define R5_DBG_MIDR	0x0D00 // Main ID Register
+#define R5_DBG_CTR	0x0D04 // Cache Type Register
+#define R5_DBG_TCMTR	0x0D08 // TCM Type Register
+#define R5_DBG_MPUIR	0x0D10 // MPU Type Register
+#define R5_DBG_MPIDR	0x0D14 // Multiprocessor Affinity Register
+#define R5_DBG_ID_PFR0	0x0D20 // Processor Feature Register 0
+#define R5_DBG_ID_PFR1	0x0D24 // Processor Feature Register 1
+#define R5_DBG_ID_DFR0	0x0D28 // Debug Feature Register 0
+#define R5_DBG_ID_AFR0	0x0D2C // Auxiliary Feature Register 0
+#define R5_DBG_ID_MMFR0	0x0D30 // Memory Model Feature Register 0
+#define R5_DBG_ID_MMFR1	0x0D34 // Memory Model Feature Register 1
+#define R5_DBG_ID_MMFR2	0x0D38 // Memory Model Feature Register 2
+#define R5_DBG_ID_MMFR3	0x0D3C // Memory Model Feature Register 3
+#define R5_DBG_ID_ISAR0	0x0D40 // ISA Feature Register 0
+#define R5_DBG_ID_ISAR1	0x0D44 // ISA Feature Register 1
+#define R5_DBG_ID_ISAR2	0x0D48 // ISA Feature Register 2
+#define R5_DBG_ID_ISAR3	0x0D4C // ISA Feature Register 3
+#define R5_DBG_ID_ISAR4	0x0D50 // ISA Feature Register 4
+#define R5_DBG_ID_ISAR5	0x0D54 // ISA Feature Register 5
+#define R5_DBG_ETMIF	0x0ED8 // ETM Interface Integration Register
+#define R5_DBG_MISCOUT	0x0EF8 // Miscellaneous Outputs Integration Register
+#define R5_DBG_MISCIN	0x0EFC // Miscellaneous Inputs Integration Register
+#define R5_DBG_ITCTRL	0x0F00 // Integration Mode Control Register
+#define R5_DBG_CLAIMSET	0x0FA0 // Claim Tag Set Register
+#define R5_DBG_CLAIMCLR	0x0FA4 // Claim Tag Clear Register
+#define R5_DBG_LAR	0x0FB0 // Lock Access Register
+#define R5_DBG_LSR	0x0FB4 // Lock Status Register
+#define R5_DBG_AUTHSTATUS 0x0FB8 // Authentication Status Register
+#define R5_DBG_DEVID	0x0FC8 // Device Indentifier
+#define R5_DBG_DEVTYPE	0x0FCC // Device Type Register
+#define R5_DBG_PIDR4	0x0FD0 // Peripheral ID Register 4
+#define R5_DBG_PIDR5	0x0FD4 // Peripheral ID Register 5
+#define R5_DBG_PIDR6	0x0FD8 // Peripheral ID Register 6
+#define R5_DBG_PIDR7	0x0FDC // Peripheral ID Register 7
+#define R5_DBG_PIDR0	0x0FE0 // Peripheral ID Register 0
+#define R5_DBG_PIDR1	0x0FE4 // Peripheral ID Register 1
+#define R5_DBG_PIDR2	0x0FE8 // Peripheral ID Register 2
+#define R5_DBG_PIDR3	0x0FEC // Peripheral ID Register 3
+#define R5_DBG_CIDR0	0x0FF0 // Component ID Register 0
+#define R5_DBG_CIDR1	0x0FF4 // Component ID Register 1
+#define R5_DBG_CIDR2	0x0FF8 // Component ID Register 2
+#define R5_DBG_CIDR3	0x0FFC
+
+struct bit_xlat_t {
+	const char *name;
+	unsigned bit;
+};
+
+#define DSCR_RXfull (1 << 30)
+#define DSCR_TXfull (1 << 29)
+#define DSCR_PipeAdv (1 << 25)
+#define DSCR_InstrCompl (1 << 24)
+#define DSCR_ExtDCCmode1 (1 << 21)
+#define DSCR_ExtDCCmode0 (1 << 20)
+#define DSCR_ADAdiscard (1 << 19)
+#define DSCR_MDBgen (1 << 15)
+#define DSCR_HDBGen (1 << 14)
+#define DSCR_ITRen (1 << 13)
+#define DSCR_UDCCdis (1 << 12)
+#define DSCR_INTdis (1 << 11)
+#define DSCR_DBGack (1 << 10)
+#define DSCR_UND_I (1 << 8)
+#define DSCR_ADABORT_I (1 << 7)
+#define DSCR_SDABORT_I (1 << 6)
+#define DSCR_MOE3 (1 << 5)
+#define DSCR_MOE2 (1 << 4)
+#define DSCR_MOE1 (1 << 3)
+#define DSCR_MOE0 (1 << 2)
+#define DSCR_RESTARTED (1 << 1)
+#define DSCR_HALTED (1 << 0)
+
+static const struct bit_xlat_t dscr_xlat[] = {
+	{ "RXfull", DSCR_RXfull },
+	{ "TXfull", DSCR_TXfull },
+	{ "PipeAdv", DSCR_PipeAdv },
+	{ "InstrCompl", DSCR_InstrCompl },
+	{ "ExtDCCmode1", DSCR_ExtDCCmode1 },
+	{ "ExtDCCmode0", DSCR_ExtDCCmode0 },
+	{ "ADAdiscard", DSCR_ADAdiscard },
+	{ "MDBgen", DSCR_MDBgen },
+	{ "HDBGen", DSCR_HDBGen },
+	{ "ITRen", DSCR_ITRen },
+	{ "UDCCdis", DSCR_UDCCdis },
+	{ "INTdis", DSCR_INTdis },
+	{ "DBGack", DSCR_DBGack },
+	{ "UND_I", DSCR_UND_I },
+	{ "ADABORT_I", DSCR_ADABORT_I },
+	{ "SDABORT_I", DSCR_SDABORT_I },
+	{ "MOE3", DSCR_MOE3 },
+	{ "MOE2", DSCR_MOE2 },
+	{ "MOE1", DSCR_MOE1 },
+	{ "MOE0", DSCR_MOE0 },
+	{ "RESTARTED", DSCR_RESTARTED },
+	{ "HALTED", DSCR_HALTED },
+	{ NULL, 0 }
+};
+
+#define SCTLR_M (1 << 0)
+#define SCTLR_A (1 << 1)
+#define SCTLR_C (1 << 2)
+#define SCTLR_SW (1 << 10)
+#define SCTLR_Z (1 << 11)
+#define SCTLR_I (1 << 12)
+#define SCTLR_V (1 << 13)
+#define SCTLR_RR (1 << 14)
+#define SCTLR_BR (1 << 17)
+#define SCTLR_DZ (1 << 19)
+#define SCTLR_FI (1 << 21)
+#define SCTLR_VE (1 << 24)
+#define SCTLR_EE (1 << 25)
+#define SCTLR_NMFI (1 << 27)
+#define SCTLR_TRE (1 << 28)
+#define SCTLR_AFE (1 << 29)
+#define SCTLR_TE (1 << 30)
+#define SCTLR_IE (1 << 31)
+
+static const struct bit_xlat_t sctlr_xlat[] = {
+	{ "M", SCTLR_M },
+	{ "A", SCTLR_A },
+	{ "C", SCTLR_C },
+	{ "SW", SCTLR_SW },
+	{ "Z", SCTLR_Z },
+	{ "I", SCTLR_I },
+	{ "V", SCTLR_V },
+	{ "RR", SCTLR_RR },
+	{ "BR", SCTLR_BR },
+	{ "DZ", SCTLR_DZ },
+	{ "FI", SCTLR_FI },
+	{ "VE", SCTLR_VE },
+	{ "EE", SCTLR_EE },
+	{ "NMFI", SCTLR_NMFI },
+	{ "TRE", SCTLR_TRE },
+	{ "AFE", SCTLR_AFE },
+	{ "TE", SCTLR_TE },
+	{ "IE", SCTLR_IE },
+	{ NULL, 0 }
+};
+
+#define CPSR_T  (1 << 5)
+#define CPSR_F  (1 << 6)
+#define CPSR_I  (1 << 7)
+#define CPSR_A  (1 << 8)
+#define CPSR_E  (1 << 9)
+#define CPSR_J  (1 << 24)
+#define CPSR_Q  (1 << 27)
+#define CPSR_V  (1 << 28)
+#define CPSR_C  (1 << 29)
+#define CPSR_Z  (1 << 30)
+#define CPSR_N  (1 << 31)
+
+static const struct bit_xlat_t cpsr_xlat[] = {
+	{ "T", CPSR_T },
+	{ "F", CPSR_F },
+	{ "I", CPSR_I },
+	{ "A", CPSR_A },
+	{ "E", CPSR_E },
+	{ "J", CPSR_J },
+	{ "Q", CPSR_Q },
+	{ "V", CPSR_V },
+	{ "C", CPSR_C },
+	{ "Z", CPSR_Z },
+	{ "N", CPSR_N },
+	{ NULL, 0 }
+};
+
+static void disp_bits(const struct bit_xlat_t *xlat, uint32_t v)
+{
+	for (; xlat->name; xlat++)
+		if (v & xlat->bit)
+			printf(" %s", xlat->name);
+}
+
+static void dbg_r5_write_dbgreg(void *regs, unsigned off, unsigned val)
+{
+	*(volatile unsigned *)(regs + off) = val;
+}
+
+static unsigned dbg_r5_read_dbgreg(void *regs, unsigned off)
+{
+	return *(volatile unsigned *)(regs + off);
+}
+
+static unsigned dbg_r5_read_dscr(void *regs)
+{
+	return *(unsigned *)(regs + R5_DBG_DSCRext);
+}
+
+static void dbg_r5_write_dscr(void *regs, unsigned val)
+{
+	*(volatile unsigned *)(regs + R5_DBG_DSCRext) = val;
+}
+
+static void dbg_r5_write_drcr(void *regs, unsigned val)
+{
+	*(volatile unsigned *)(regs + R5_DBG_DRCR) = val;
+}
+
+static void dbg_r5_write_vcr(void *regs, unsigned val)
+{
+	*(volatile unsigned *)(regs + R5_DBG_VCR) = val;
+}
+
+static void dbg_r5_write_dsccr(void *regs, unsigned val)
+{
+	*(volatile unsigned *)(regs + R5_DBG_DSCCR) = val;
+}
+
+static void dbg_r5_unlock_access(void *regs)
+{
+	*(volatile unsigned *)(regs + R5_DBG_LAR) = 0xc5acce55;
+}
+
+static void dbg_r5_enable_itr(void *regs)
+{
+	unsigned dscr = dbg_r5_read_dscr(regs);
+
+	/* ITRen */
+	dbg_r5_write_dscr(regs, dscr | DSCR_ITRen);
+}
+
+static void dbg_r5_halt_restart(void *regs, unsigned val)
+{
+	/* Request */
+	dbg_r5_write_drcr(regs, val);
+
+	while (1) {
+		unsigned dscr = dbg_r5_read_dscr(regs);
+		if (dscr & val)
+			return;
+		usleep(1);
+	}
+}
+
+static void dbg_r5_restart(void *regs)
+{
+	dbg_r5_halt_restart(regs, 2);
+}
+
+static void dbg_r5_reset(void *regs)
+{
+	*(volatile unsigned *)(regs + R5_DBG_PRCR) |= 2;
+}
+
+static int dbg_r5_wait_dcc_tx(void *regs)
+{
+	/* Wait until TXfull is set */
+	for (unsigned timeout = 10; timeout > 0; timeout--) {
+		if (dbg_r5_read_dscr(regs) & DSCR_TXfull)
+			return 0;
+		usleep(1);
+	}
+	return -1;
+}
+
+static unsigned dbg_r5_read_dcc(void *regs)
+{
+	if (dbg_r5_wait_dcc_tx(regs) < 0) {
+		printf("cannot read dcc\n");
+		return 0;
+	}
+
+	return *(volatile unsigned *)(regs + R5_DBG_DTRTXext);
+}
+
+static void dbg_r5_write_dcc(void *regs, uint32_t val)
+{
+	/* Wait until RXfull is empty */
+	while (dbg_r5_read_dscr(regs) & DSCR_RXfull)
+		usleep(1);
+
+	*(volatile unsigned *)(regs + R5_DBG_DTRRXext) = val;
+}
+
+static void dbg_r5_exec_insn(void *regs, unsigned insn)
+{
+	unsigned dscr;
+
+	/* Wait until InstrCompl is set */
+	while (1) {
+		dscr = dbg_r5_read_dscr(regs);
+		if (dscr & (1 << 24))
+			break;
+		usleep(1);
+	}
+
+	if (0) {
+		printf ("dscr: %08x\n", dscr);
+		/* Clear sticky pipeline advance */
+		dbg_r5_write_drcr(regs, (1 << 3));
+		printf ("dscr: %08x\n", dbg_r5_read_dscr(regs));
+	}
+
+	*(volatile unsigned *)(regs + R5_DBG_ITR) = insn;
+
+	/* Wait until InstrCompl is set */
+	while (!(dbg_r5_read_dscr(regs) & (1 << 24)))
+		usleep(1);
+}
+
+static void dbg_r5_exec_mrc(void *regs, unsigned coproc, unsigned opc1,
+			    unsigned crn, unsigned crm, unsigned opc2)
+{
+	unsigned insn;
+
+	insn = (0xe << 28) | (0xe << 24) | (opc1 << 21) | (1 << 20)
+		| (crn << 16) | (0 << 12) | (coproc << 8) | (opc2 << 5)
+		| (1 << 4) | (crm << 0);
+
+	dbg_r5_exec_insn(regs, insn);
+}
+
+static void dbg_r5_exec_mcr(void *regs, unsigned coproc, unsigned opc1,
+			    unsigned crn, unsigned crm, unsigned opc2)
+{
+	unsigned insn;
+
+	insn = (0xe << 28) | (0xe << 24) | (opc1 << 21) | (0 << 20)
+		| (crn << 16) | (0 << 12) | (coproc << 8) | (opc2 << 5)
+		| (1 << 4) | (crm << 0);
+
+	dbg_r5_exec_insn(regs, insn);
+}
+
+static void dbg_r5_exec_dcc_to_reg(void *regs, unsigned rd)
+{
+	/* MRC p14, 0, rd, c0, c5, 0 */
+	dbg_r5_exec_insn(regs, 0xee100e15 + (rd << 12));
+}
+
+static void dbg_r5_exec_reg_to_dcc(void *regs, unsigned rd)
+{
+	/* MCR p14, 0, rd, c0, c5, 0 */
+	dbg_r5_exec_insn(regs, 0xee000e15 + (rd << 12));
+}
+
+static void dbg_r5_exec_iciallu(void *regs)
+{
+	/* MCR p15, 0, r0, cr7, cr5, 0 */
+	dbg_r5_exec_insn(regs, 0xee070f15);
+}
+
+/* Read a reg, from 0 to 14 */
+static unsigned dbg_r5_read_reg(void *regs, unsigned rd)
+{
+	dbg_r5_exec_reg_to_dcc(regs, rd);
+	return dbg_r5_read_dcc(regs);
+}
+
+static unsigned dbg_r5_read_pc_via_r0(void *regs)
+{
+	/* mov r0, pc */
+	dbg_r5_exec_insn(regs, 0xe1a0000f);
+
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+
+	return dbg_r5_read_dcc(regs);
+}
+
+static unsigned dbg_r5_read_cpsr_via_r0(void *regs)
+{
+	/* MRS r0, CPSR */
+	dbg_r5_exec_insn(regs, 0xe10f0000);
+
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+
+	return dbg_r5_read_dcc(regs);
+}
+
+static void dbg_r5_write_pc_via_r0(void *regs, uint32_t val)
+{
+	dbg_r5_write_dcc(regs, val);
+
+	dbg_r5_exec_dcc_to_reg(regs, 0);
+
+	/* mov pc, r0 */
+	dbg_r5_exec_insn(regs, 0xe1a0f000);
+}
+
+static void dbg_r5_write_cpsr_via_r0(void *regs, uint32_t val)
+{
+	dbg_r5_write_dcc(regs, val);
+
+	dbg_r5_exec_dcc_to_reg(regs, 0);
+
+	/* msr CPSR, r0 */
+	dbg_r5_exec_insn(regs, 0xe129f000);
+}
+
+/* Write a reg, from 0 to 14 */
+static void dbg_r5_write_reg(void *regs, unsigned rd, uint32_t val)
+{
+	dbg_r5_write_dcc(regs, val);
+
+	dbg_r5_exec_dcc_to_reg(regs, rd);
+}
+
+static unsigned dbg_r5_read_cp_via_r0(void *regs,
+				      unsigned coproc, unsigned opc1,
+				      unsigned crn, unsigned crm, unsigned opc2)
+{
+	dbg_r5_exec_mrc(regs, coproc, opc1, crn, crm, opc2);
+	return dbg_r5_read_reg(regs, 0);
+}
+
+static void dbg_r5_write_cp_via_r0(void *regs,
+				   unsigned coproc, unsigned opc1,
+				   unsigned crn, unsigned crm, unsigned opc2,
+				   unsigned val)
+{
+	dbg_r5_write_reg(regs, 0, val);
+	dbg_r5_exec_mcr(regs, coproc, opc1, crn, crm, opc2);
+}
+
+static const char * const xlat_moe[] = {
+	"halt", "bp", "0010", "bkpt",
+	"RQm", "0101", "0110", "0111",
+	"1000", "1001", "wp", "1011",
+	"1100", "1101", "1110", "1111" };
+
+static void dbg_disp_dscr(unsigned dscr)
+{
+	unsigned moe = (dscr >> 2) & 0x0f;
+	printf("dscr: %08x, moe:%s", dscr, xlat_moe[moe]);
+	disp_bits(dscr_xlat, dscr);
+	printf("\n");
+}
+
+static int dbg_r5_halt(void *regs)
+{
+	unsigned timeout;
+
+	unsigned dscr = dbg_r5_read_dscr(regs);
+	if (!(dscr & 1)) {
+		/* Not in debug state */
+
+		if (!(dscr & DSCR_HDBGen)) {
+			/* Enable halting debug-mode */
+			dbg_r5_write_dscr(regs, dscr | DSCR_HDBGen);
+		}
+
+		/* Request to halt */
+		dbg_r5_write_drcr(regs, 1);
+
+		for (timeout = 10; timeout > 0; timeout--) {
+			dscr = dbg_r5_read_dscr(regs);
+			if (dscr & 1)
+				break;
+			usleep(1);
+		}
+		if (timeout == 0) {
+			printf("cannot halt target!\n");
+			return -1;
+		}
+	}
+
+	if (!(dscr & DSCR_ITRen))
+		dbg_r5_write_dscr(regs, dscr | DSCR_ITRen);
+
+	if (dscr & DSCR_TXfull) {
+		printf ("TXfull was set!\n");
+
+		dbg_r5_read_dbgreg (regs, R5_DBG_DTRTXext);
+	}
+
+	if (dscr & DSCR_RXfull) {
+		unsigned r0;
+		printf ("RXfull was set!\n");
+
+		r0 = dbg_r5_read_reg (regs, 0);
+		dbg_r5_exec_dcc_to_reg(regs, 0);
+		dbg_r5_write_reg (regs, 0, r0);
+	}
+
+	return 0;
+}
+
+static void dbg_r5_dump(void *regs)
+{
+	unsigned dscr = dbg_r5_read_dscr(regs);
+	printf ("DIDR: %08x\n", *(unsigned *)(regs + R5_DBG_DIDR));
+	printf ("WAFR: %08x\n", *(unsigned *)(regs + R5_DBG_WFAR));
+	printf ("DSCR: %08x", dscr);
+	disp_bits(dscr_xlat, dscr);
+	printf ("\n");
+	printf ("LSR:  %08x\n", *(unsigned *)(regs + R5_DBG_LSR));
+	printf ("AUTHSTATUS: %08x\n", *(unsigned *)(regs + R5_DBG_AUTHSTATUS));
+	printf ("PRSR: %08x\n", *(unsigned *)(regs + R5_DBG_PRSR));
+	printf ("PRCR: %08x\n", *(unsigned *)(regs + R5_DBG_PRCR));
+
+	dbg_r5_enable_itr(regs);
+
+	if (verbose > 2 && (dscr & 1)) {
+		for (unsigned i = 0; i < 15; i++)
+			printf("R%02u: %08x\n", i, dbg_r5_read_reg(regs, i));
+	}
+}
+
+static void *zynqmp_map_dbg_r5(int fd, unsigned dbg_base)
+{
+	void *regs;
+
+	regs = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, dbg_base);
+	if (regs == MAP_FAILED) {
+		printf("cannot mmap dbg regs: %m\n");
+		return NULL;
+	}
+	return regs;
+}
+
+static void zynqmp_dbg_dump(int fd, unsigned dbg_base)
+{
+	void *regs = zynqmp_map_dbg_r5(fd, dbg_base);
+	if (regs == NULL)
+		return;
+	dbg_r5_dump(regs);
+}
+
+static void zynqmp_dbg_halt(int fd, unsigned dbg_base)
+{
+	void *regs = zynqmp_map_dbg_r5(fd, dbg_base);
+	if (regs == NULL)
+		return;
+
+	dbg_r5_unlock_access(regs);
+
+	dbg_r5_halt(regs);
+}
+
+static void zynqmp_dbg_restart(int fd, unsigned dbg_base)
+{
+	void *regs = zynqmp_map_dbg_r5(fd, dbg_base);
+	if (regs == NULL)
+		return;
+	dbg_r5_restart(regs);
+}
+
+static void zynqmp_dbg_reset(int fd, unsigned dbg_base)
+{
+	void *regs = zynqmp_map_dbg_r5(fd, dbg_base);
+	if (regs == NULL)
+		return;
+	dbg_r5_reset(regs);
+}
+
+static int gdb_check_mem_fault(struct dbg_port *dbg, unsigned addr)
+{
+	unsigned dscr;
+	void *regs = dbg->dap;
+
+	dscr = dbg_r5_read_dscr(regs);
+	if (dscr & (DSCR_SDABORT_I | DSCR_ADABORT_I)) {
+		/* Clear the bit */
+		dbg_r5_write_drcr(regs, 4);
+
+		if (verbose) {
+			unsigned r0, val;
+			printf ("memory access at 0x%08x failed, dscr: %08x",
+				addr, dscr);
+			disp_bits(dscr_xlat, dscr);
+
+			r0 = dbg_r5_read_reg(regs, 0);
+
+			/* Read DFSR Data Fault Status Register
+			   mrc	15, 0, r0, cr5, cr0, {0} */
+			dbg_r5_exec_insn(regs, 0xee150f10);
+			dbg_r5_exec_reg_to_dcc(regs, 0);
+			val = dbg_r5_read_dcc(regs);
+			printf (", DFSR: %08x", val);
+
+			/* Read DFAR Data Fault Address Register
+			   mrc	15, 0, r0, cr6, cr0, {0} */
+			dbg_r5_exec_insn(regs, 0xee160f10);
+			dbg_r5_exec_reg_to_dcc(regs, 0);
+			val = dbg_r5_read_dcc(regs);
+			printf (", DFAR: %08x\n", val);
+
+			dbg_r5_write_reg(regs, 0, r0);
+		}
+
+		return -1;
+	}
+	return 0;
+}
+
+/**
+ * Write data to memory
+ */
+static int gdb_r5_handle_M(struct dbg_port *dbg,
+			   struct gdb_packet *out,
+			   struct gdb_packet *in)
+{
+	uint32_t addr, n;
+	uint32_t r0, r1;
+	char *indata;
+	int ret;
+
+	indata = strchr(in->data, ':');
+	if (!indata) {
+		gdb_packet_put_str(out, "E01");
+		return 0;
+	}
+	indata++; /* skip ':' */
+	ret = sscanf(in->data + 1, "%"SCNx32",%"SCNx32":", &addr, &n);
+	if (ret != 2) {
+		gdb_packet_put_str(out, "E02");
+		return 0;
+	}
+
+	if (n * 2 != in->size - (indata - in->data)) {
+		gdb_packet_put_str(out, "E03");
+		return 0;
+	}
+
+	r0 = dbg_r5_read_reg(dbg->dap, 0);
+	r1 = dbg_r5_read_reg(dbg->dap, 1);
+	dbg_r5_write_reg(dbg->dap, 0, addr);
+
+	if (addr % 4 == 0) {
+		for (; n >= 4; n -= 4, indata += 8, addr += 4) {
+			uint32_t w;
+
+			ret = sscanf(indata, "%08"SCNx32, &w);
+			if (ret != 1)
+				break;
+
+			dbg_r5_write_reg(dbg->dap, 1, ntohl(w));
+
+			/* str r1,[r0],#4 */
+			dbg_r5_exec_insn(dbg->dap, 0xe4801004);
+
+			if (gdb_check_mem_fault(dbg, addr) < 0)
+				break;
+		}
+	}
+	for (; n > 0; --n, indata += 2, addr++) {
+		uint32_t b;
+
+		ret = sscanf(indata, "%02"SCNx32, &b);
+		if (ret != 1)
+			break;
+		dbg_r5_write_reg(dbg->dap, 1, b);
+		/* strb r1,[r0],#1 */
+		dbg_r5_exec_insn(dbg->dap, 0xe4c01001);
+
+		if (gdb_check_mem_fault(dbg, addr) < 0)
+			break;
+	}
+
+	dbg_r5_write_reg(dbg->dap, 0, r0);
+	dbg_r5_write_reg(dbg->dap, 1, r1);
+
+	if (n > 0)
+		gdb_packet_put_str(out, "E04");
+	else
+		gdb_packet_put_str(out, "OK");
+
+	return 0;
+}
+
+/**
+ * Read data from memory
+ */
+static int gdb_r5_handle_m(struct dbg_port *dbg,
+			   struct gdb_packet *out,
+			   struct gdb_packet *in)
+{
+	uint32_t addr, n;
+	uint32_t r0, r1;
+	int ret;
+
+	ret = sscanf(in->data + 1, "%x,%x", &addr, &n);
+	if (ret != 2) {
+		gdb_packet_put_str(out, "E01");
+		return 0;
+	}
+	r0 = dbg_r5_read_reg(dbg->dap, 0);
+	r1 = dbg_r5_read_reg(dbg->dap, 1);
+	dbg_r5_write_reg(dbg->dap, 0, addr);
+	out->size = 0;
+	for (; n > 0; --n, addr++) {
+		uint8_t b;
+
+		/* ldrb r1,[r0],1 */
+		dbg_r5_exec_insn(dbg->dap, 0xe4d01001);
+
+		if (gdb_check_mem_fault(dbg, addr) < 0) {
+			gdb_packet_put_str(out, "E01");
+			break;
+		}
+		b = dbg_r5_read_reg(dbg->dap, 1);
+		gdb_packet_append_x8(out, b);
+	}
+
+	dbg_r5_write_reg(dbg->dap, 0, r0);
+	dbg_r5_write_reg(dbg->dap, 1, r1);
+
+	return 0;
+}
+
+/**
+ * Write all register
+ */
+static int gdb_r5_handle_G(struct dbg_port *dbg,
+			   struct gdb_packet *out,
+			   struct gdb_packet *in)
+{
+#define NBR_R5_REGS (16 + 3*8 + 1 + 1)
+	uint32_t regs[NBR_R5_REGS]; /* 16 regs, 8 fpa, fps, cpsr */
+	int i;
+
+	if (in->size != 1 + NBR_R5_REGS * 8) {
+		gdb_packet_put_str(out, "E01");
+		return 0;
+	}
+
+	for (i = 0; i < NBR_R5_REGS; ++i) {
+		uint32_t v;
+		int ret = sscanf(in->data + 1 + i * 8, "%08"SCNx32, &v);
+
+		regs[i] = ntohl(v);
+
+		if (ret != 1) {
+			gdb_packet_put_str(out, "E02");
+			return 0;
+		}
+	}
+
+	dbg_r5_write_pc_via_r0(dbg->dap, regs[15]);
+	dbg_r5_write_cpsr_via_r0(dbg->dap, regs[41]);
+
+	for (i = 0; i < 15; ++i)
+		dbg_r5_write_reg(dbg->dap, i, regs[i]);
+
+	if (verbose > 1) {
+		for (i = 0; i < 16; ++i) {
+			printf ("R%02u: %08x", i, regs[i]);
+			if (i % 4 == 3)
+				printf ("\n");
+			else
+				printf ("  ");
+		}
+	}
+
+	gdb_packet_put_str(out, "OK");
+
+	return 0;
+}
+
+static int gdb_r5_handle_g(struct dbg_port *dbg,
+			   struct gdb_packet *out,
+			   struct gdb_packet *in)
+{
+	uint32_t regs[15], pc, cpsr;
+	unsigned i;
+
+	out->size = 0;
+
+	/* 0-15: regs */
+	for (i = 0; i < 15; ++i) {
+		regs[i] = dbg_r5_read_reg(dbg->dap, i);
+		gdb_packet_append_x32(out, htonl(regs[i]));
+	}
+
+	cpsr = dbg_r5_read_cpsr_via_r0(dbg->dap);
+	pc = dbg_r5_read_pc_via_r0(dbg->dap);
+
+	/* Adjust PC */
+	if (cpsr & (1 << 5))
+		pc -= 4; /* Thumb mode */
+	else
+		pc -= 8; /* ARM mode */
+	/* 15: PC */
+	gdb_packet_append_x32(out, htonl(pc));
+
+	/* 16-24: fp0-fp7 (96b) + fps (32b) */
+	for (i = 0; i < 8 * 3 + 1; i++)
+		gdb_packet_append_x32(out, 0);
+
+	/* 25: cpsr */
+	gdb_packet_append_x32(out, htonl(cpsr));
+
+	/* Restore r0 */
+	dbg_r5_write_reg(dbg->dap, 0, regs[0]);
+
+	return 0;
+}
+
+static void dbg_r5_disp_sctlr(void *regs)
+{
+	unsigned val, r0;
+
+	r0 = dbg_r5_read_reg(regs, 0);
+
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 1, 0, 0);
+	printf("sctlr: %08x", val);
+	disp_bits(sctlr_xlat, val);
+	printf("\n");
+
+	/* Read ACTLR base register
+	   MRC p15, 0, <Rd>, c1, c0, 1 */
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 1, 0, 1);
+	printf ("ACTLR: %08x\n", val);
+
+	dbg_r5_write_reg(regs, 0, r0);
+}
+
+static void dbg_r5_disp_mpu(void *regs)
+{
+	unsigned val, r0;
+	unsigned nreg;
+	unsigned i;
+
+	if (dbg_r5_halt(regs) < 0)
+		return;
+
+	r0 = dbg_r5_read_reg(regs, 0);
+
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 0, 0, 0);
+	printf("midr: %08x\n", val);
+
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 0, 0, 4);
+	nreg = (val >> 8) & 0xff;
+	printf("mpuir: %08x, nregions=%u\n", val, nreg);
+
+	val = dbg_r5_read_cp_via_r0(regs, 15, 1, 0, 0, 0);
+	printf("ccsidr: %08x\n", val);
+
+	val = dbg_r5_read_cp_via_r0(regs, 15, 1, 0, 0, 1);
+	printf("clidr: %08x\n", val);
+
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 1, 0, 0);
+	printf("sctlr: %08x", val);
+	disp_bits(sctlr_xlat, val);
+	printf("\n");
+
+
+	/* Note: region 0 has lowest priority, region 15 has highest priority */
+	for (i = 0; i < nreg; i++) {
+	  unsigned sz;
+	  unsigned acc;
+	  unsigned addr;
+	  const char *ca;
+
+	  /* Set index.  */
+	  dbg_r5_write_cp_via_r0(regs, 15, 0, 6, 2, 0, i);
+
+	  /* Read size and enable bit. */
+	  sz = dbg_r5_read_cp_via_r0(regs, 15, 0, 6, 1, 2);
+	  if ((sz & 1) == 0)
+		  continue;
+
+	  addr = dbg_r5_read_cp_via_r0(regs, 15, 0, 6, 1, 0);
+	  acc = dbg_r5_read_cp_via_r0(regs, 15, 0, 6, 1, 4);
+
+	  printf("reg %02u: base: %08x-%08x [sz=%04x, acc=%08x ",
+		 i, addr, addr + (2 << ((sz >> 1) & 0x1f)) - 1, sz, acc);
+	  switch(acc & 0x3f) {
+	  case 0x00:
+		  ca = "SO";
+		  break;
+	  case 0x10:
+		  ca = "NC";
+		  break;
+	  case 0x0b:
+		  ca = "WB";
+		  break;
+	  default:
+		  ca = "??";
+		  break;
+	  }
+	  printf ("%s", ca);
+	  static const char * const rights[] = {
+		  "p:-- u:-- ",
+		  "p:rw u:-- ",
+		  "p:rw u:ro ",
+		  "p:rw u:rw ",
+
+		  "p:?? u:?? ",
+		  "p:ro u:-- ",
+		  "p:ro u:ro ",
+		  "p:?? u:?? "
+	  };
+	  printf(" %s %s]\n",
+		 acc & (1 << 12) ? "nx" : "  ",
+		 rights[(acc >>  8) & 0x7]);
+	}
+	dbg_r5_write_reg(regs, 0, r0);
+}
+
+static void dbg_r5_disp_tcm(void *regs)
+{
+	unsigned val, r0;
+
+	r0 = dbg_r5_read_reg(regs, 0);
+
+	/* Read BTCM base register
+	   MRC p15, 0, <Rd>, c9, c1, 0 */
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 9, 1, 0);
+	printf ("BTCM:  %08x\n", val);
+
+	/* Read ATCM base register
+	   MRC p15, 0, <Rd>, c9, c1, 1 */
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 9, 1, 1);
+	printf ("ATCM:  %08x\n", val);
+
+	/* Read ACTLR base register
+	   MRC p15, 0, <Rd>, c1, c0, 1 */
+	val = dbg_r5_read_cp_via_r0(regs, 15, 0, 1, 0, 1);
+	printf ("ACTLR: %08x\n", val);
+
+	dbg_r5_write_reg(regs, 0, r0);
+}
+
+static void dbg_r5_disp_dfault(void *regs)
+{
+	unsigned r0, val;
+
+	r0 = dbg_r5_read_reg(regs, 0);
+
+	/* Read DFSR Data Fault Status Register
+	   mrc	15, 0, r0, cr5, cr0, {0} */
+	dbg_r5_exec_mrc(regs, 15, 0, 5, 0, 0);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("DFSR:  %08x\n", val);
+
+	/* Read DFAR Data Fault Address Register
+	   mrc	15, 0, r0, cr6, cr0, {0} */
+	dbg_r5_exec_mrc(regs, 15, 0, 6, 0, 0);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("DFAR:  %08x\n", val);
+
+	/* Read ADFSR Data Fault Address Register
+	   mrc	15, 0, r0, cr5, cr1, {0} */
+	dbg_r5_exec_mrc(regs, 15, 0, 5, 1, 0);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("ADFSR: %08x", val);
+	printf (" (side: %x, sideext: %x)\n",
+		(val >> 22) & 0x3, (val >> 20) & 1);
+
+	dbg_r5_write_reg(regs, 0, r0);
+}
+
+static void dbg_r5_disp_ifault(void *regs)
+{
+	unsigned r0, val;
+
+	r0 = dbg_r5_read_reg(regs, 0);
+
+	/* Read IFSR Instruction Fault Status Register
+	   mrc	15, 0, r0, cr5, cr0, {1} */
+	dbg_r5_exec_mrc(regs, 15, 0, 5, 0, 1);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("IFSR:  %08x\n", val);
+
+	/* Read IFAR Instruction Fault Address Register
+	   mrc	15, 0, r0, cr6, cr0, {2} */
+	dbg_r5_exec_mrc(regs, 15, 0, 6, 0, 2);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("IFAR:  %08x\n", val);
+
+	/* Read AIFSR Aux Instruction Fault Address Register
+	   mrc	15, 0, r0, cr5, cr1, {1} */
+	dbg_r5_exec_mrc(regs, 15, 0, 5, 1, 0);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("AIFSR: %08x", val);
+	printf (" (side: %x, sideext: %x)\n",
+		(val >> 22) & 0x3, (val >> 20) & 1);
+
+	dbg_r5_write_reg(regs, 0, r0);
+}
+
+static const char * const xlat_cpsr_mode[] = {
+	"user", "fiq", "irq", "scv",
+	"0100", "0101", "mon", "abt",
+	"1000", "1001", "hyp", "und",
+	"1100", "1101", "1110", "sys"
+};
+
+static void dbg_disp_cpsr(unsigned cpsr)
+{
+	printf ("cpsr: %08x, mode: %s", cpsr, xlat_cpsr_mode[cpsr & 0x0f]);
+	disp_bits (cpsr_xlat, cpsr);
+	printf("\n");
+}
+
+static void gdb_disp_halt_state(struct dbg_port *dbg, unsigned dscr)
+{
+	unsigned r0;
+	unsigned cpsr;
+	unsigned pc;
+
+	dbg_disp_dscr(dscr);
+	r0 = dbg_r5_read_reg(dbg->dap, 0);
+
+	cpsr = dbg_r5_read_cpsr_via_r0(dbg->dap);
+	dbg_disp_cpsr(cpsr);
+	pc = dbg_r5_read_pc_via_r0(dbg->dap);
+	printf("raw pc: %08x\n", pc);
+
+	dbg_r5_write_reg(dbg->dap, 0, r0);
+
+	for (unsigned i = 0; i < 15; i++)
+		printf("R%02u: %08x\n", i, dbg_r5_read_reg(dbg->dap, i));
+
+}
+
+/**
+ * Continue command
+ */
+static int gdb_r5_handle_c(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
+{
+	if (in->size > 1) {
+		out->size = 0;
+		return 0;
+	}
+
+	/* Invalidate I cache */
+	dbg_r5_exec_iciallu(dbg->dap);
+
+	dbg_r5_restart(dbg->dap);
+
+	while (1) {
+		int ret;
+
+		/* Dump vuart. */
+		gdb_maybe_read_term(dbg);
+
+		unsigned dscr = dbg_r5_read_dscr(dbg->dap);
+		if (dscr & 1) {
+			if (verbose) {
+				printf("target halted\n");
+				gdb_disp_halt_state(dbg, dscr);
+			}
+			gdb_packet_put_str(out, "S05");
+			break;
+		}
+
+		ret = gdb_maybe_stop(dbg);
+		if (ret < 0)
+			return ret;
+		if (ret == 0)
+			continue;
+
+		/* GDB wants something from us */
+		dbg_r5_halt(dbg->dap);
+		gdb_packet_put_str(out, "S02");
+		break;
+	}
+
+	return 0;
+}
+
+static int gdb_r5_handle_qRcmd(struct dbg_port *dbg,
+			       struct gdb_packet *out,
+			       struct gdb_packet *in)
+{
+	char buf[GDB_PACKET_SIZE_MAX / 2];
+
+	if (gdb_qRcmd_decode(buf, in) < 0) {
+		out->size = 0;
+		return 0;
+	}
+
+	if (strcmp(buf, "help") == 0) {
+		strcpy(buf, "usage: reset | cpsr | sctlr | mpu | tcm "
+		       "| dfault | ifault | help\n");
+	}
+	else if (strcmp(buf, "reset") == 0) {
+		/* svc mode, mask IRQ, FIQ, ASABORT */
+		dbg_r5_write_cpsr_via_r0(dbg->dap, 0x1d3);
+		dbg_r5_write_pc_via_r0(dbg->dap, 0);
+		/* TODO: sctlr ? */
+		strcpy(buf, "cpsr initialized\n");
+	}
+	else if (strcmp(buf, "cpsr") == 0) {
+		unsigned dscr = dbg_r5_read_dscr(dbg->dap);
+		gdb_disp_halt_state(dbg, dscr);
+		strcpy(buf, "ok\n");
+	}
+	else if (strcmp(buf, "mpu") == 0) {
+		dbg_r5_disp_mpu(dbg->dap);
+		strcpy(buf, "ok\n");
+	}
+	else if (strcmp(buf, "tcm") == 0) {
+		dbg_r5_disp_tcm(dbg->dap);
+		strcpy(buf, "ok\n");
+	}
+	else if (strcmp(buf, "dfault") == 0) {
+		dbg_r5_disp_dfault(dbg->dap);
+		strcpy(buf, "ok\n");
+	}
+	else if (strcmp(buf, "ifault") == 0) {
+		dbg_r5_disp_ifault(dbg->dap);
+		strcpy(buf, "ok\n");
+	}
+	else if (strcmp(buf, "sctlr") == 0) {
+		dbg_r5_disp_sctlr(dbg->dap);
+		strcpy(buf, "ok\n");
+	}
+	else {
+		strcpy(buf,"unhandled mon command, try 'mon help'\n");
+	}
+
+	/* Encode to hex.  */
+	gdb_qRcmd_encode(buf, out);
+	return 0;
+}
+
+static int gdb_r5_handle_q(struct dbg_port *dbg,
+			   struct gdb_packet *out,
+			   struct gdb_packet *in)
+{
+	if (strncmp(in->data, "qRcmd,", 6) == 0)
+		return gdb_r5_handle_qRcmd(dbg, out, in);
+	return gdb_handle_q(dbg, out, in);
+}
+
+static int gdb_r5_handle_D(struct dbg_port *dbg,
+			   struct gdb_packet *out,
+			   struct gdb_packet *in)
+{
+	/* Invalidate I cache */
+	dbg_r5_exec_iciallu(dbg->dap);
+
+	dbg_r5_write_vcr(dbg->dap, 0);
+	dbg_r5_restart(dbg->dap);
+	gdb_packet_put_str(out, "OK");
+
+	return 0;
+}
+
+static gdb_command_t * const gdb_r5_commands[] = {
+	['c'] = gdb_r5_handle_c,
+	['D'] = gdb_r5_handle_D,
+	['g'] = gdb_r5_handle_g,
+	['G'] = gdb_r5_handle_G,
+	['H'] = gdb_handle_H,
+	['k'] = gdb_handle_k,
+	['M'] = gdb_r5_handle_M,
+	['m'] = gdb_r5_handle_m,
+//	['p'] = gdb_urv_handle_p,
+	['P'] = gdb_handle_P,
+	['q'] = gdb_r5_handle_q,
+//	['s'] = gdb_urv_handle_s,
+	['v'] = gdb_handle_v,
+	['v'] = gdb_handle_v,
+	['X'] = gdb_handle_X,
+	['?'] = gdb_handle_qm,
+};
+
+static int gdb_r5_halt(struct dbg_port *dbg)
+{
+	if (dbg_r5_halt(dbg->dap) < 0)
+		return -1;
+
+	/* Catch undefined, svc, prefetch, data */
+	dbg_r5_write_vcr(dbg->dap, 0x1e);
+
+	return 0;
+}
+
+static void gdb_r5_server(struct dbg_port *dbg, int argc, char **argv)
+{
+	dbg_r5_unlock_access(dbg->dap);
+
+	/* For write-through */
+	dbg_r5_write_dsccr(dbg->dap, 0);
+
+	dbg_r5_dump(dbg->dap);
+
+	/* Check writes */
+	dbg_r5_write_dbgreg (dbg->dap, R5_DBG_WFAR, 0x005c3a7e);
+	if (dbg_r5_read_dbgreg (dbg->dap, R5_DBG_WFAR) != 0x005c3a7e) {
+		printf("cannot write debug registers, unauthorized ?\n");
+		return;
+	}
+
+	dbg->cmds = gdb_r5_commands;
+	dbg->n_cmds = sizeof(gdb_r5_commands) / sizeof(gdb_r5_commands[0]);
+	dbg->post_connect_hook = gdb_r5_halt;
+
+	gdb_server(dbg, argc, argv);
+}
+
+static void help_zynqmp_rpu(const char *name)
+{
+	printf("usage: %s zynqmp-rpu SUBCMD\n", progname);
+}
+
+static int do_zynqmp_rpu(int argc, char *argv[])
+{
+	int fd;
+	void *rpu_map;
+	void *crl_map;
+
+	fd = open("/dev/mem", O_RDWR | O_SYNC);
+	if (fd < 0) {
+		fprintf(stderr, "cannot open /dev/mem: %s\n",
+			strerror(errno));
+		return -1;
+	}
+
+	rpu_map = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE,
+		   MAP_SHARED, fd, RPU_BASEADDR);
+
+	crl_map = mmap(NULL, 0x1000, PROT_READ | PROT_WRITE,
+		   MAP_SHARED, fd, CRL_APB_BASEADDR);
+
+	/* Do not try to map PMU, it is probably in the secure part */
+
+	if (rpu_map == MAP_FAILED || crl_map == MAP_FAILED) {
+		fprintf(stderr, "cannot map /dev/mem: %s\n",
+			strerror(errno));
+		close(fd);
+		return -1;
+	}
+
+	for (unsigned i = 1; i < argc; i++) {
+		if (strcmp(argv[i], "dump") == 0) {
+			unsigned val;
+
+			val = *(volatile unsigned *)(rpu_map + RPU_RPU_GLBL_CNTL);
+			printf ("RPU glbl_cntl:    0x%08x\n", val);
+			val = *(volatile unsigned *)(rpu_map + RPU_RPU_0_CFG);
+			printf ("RPU rpu0_cfg:     0x%08x\n", val);
+			val = *(volatile unsigned *)(rpu_map + RPU_RPU_0_STATUS);
+			printf ("RPU rpu0_status:  0x%08x\n", val);
+			val = *(volatile unsigned *)(rpu_map + RPU_RPU_1_CFG);
+			printf ("RPU rpu1_cfg:     0x%08x\n", val);
+			val = *(volatile unsigned *)(rpu_map + RPU_RPU_1_STATUS);
+			printf ("RPU rpu1_status:  0x%08x\n", val);
+			val = *(volatile unsigned *)(crl_map + CRL_APB_CPU_R5_CTRL);
+			printf ("CRL_APB cpu_r5_ctrl:  0x%08x\n", val);
+			val = *(volatile unsigned *)(crl_map + CRL_APB_RST_LPD_TOP);
+			printf ("CRL_APB rst_lpd_top:  0x%08x\n", val);
+		}
+		else if (strcmp(argv[i], "clear-tcm") == 0) {
+			clear_tcm(fd, &rpu_sram_map[0]);
+			clear_tcm(fd, &rpu_sram_map[1]);
+		}
+		else if (strcmp(argv[i], "dump-atcm0") == 0) {
+			if (dump_tcm(fd, ATCM0_ADDRESS) < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "dump-btcm0") == 0) {
+			if (dump_tcm(fd, BTCM0_ADDRESS) < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "dump-ocm0") == 0) {
+			if (dump_tcm(fd, OCM_ADDRESS) < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "dump-ocm3") == 0) {
+			if (dump_tcm(fd, OCM_ADDRESS + 0x30000) < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "dump-elf") == 0) {
+			if (i + 1 >= argc) {
+				printf("missing elf filename\n");
+				return -1;
+			}
+			const char *filename = argv[++i];
+			if (elf_foreach_segment(filename, EM_ARM,
+						elf_dump_cb, NULL) < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "rpu-off") == 0) {
+			/* Power down RPU 0 */
+			if (zynqmp_pm ("pm_force_powerdown 7\n") < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "load") == 0) {
+			if (i + 1 >= argc) {
+				printf("missing elf filename\n");
+				return -1;
+			}
+			struct rpu_load_data data_cb;
+
+			unsigned rst_lpd = *(volatile unsigned *)(crl_map + CRL_APB_RST_LPD_TOP);
+
+			if ((rst_lpd & CRL_APB_RST_LPD_TOP_RPU_R50_RESET_MASK) != 0) {
+				printf("R5-0 under reset, run init sequence\n");
+				if (zynqmp_init_rpu(fd) < 0)
+					return -1;
+			}
+
+			/* Power down RPU 0, in case it was running */
+			if (zynqmp_pm ("pm_force_powerdown 7\n") < 0)
+				return -1;
+
+			data_cb.devmem_fd = fd;
+			data_cb.map = NULL;
+			data_cb.len = 0;
+			data_cb.vaddr = 0;
+
+			const char *filename = argv[++i];
+			if (elf_foreach_segment(filename, EM_ARM,
+						elf_rpu_load_cb, &data_cb) < 0)
+				return -1;
+
+			/* Wakeup RPU 0 */
+			if (zynqmp_pm ("pm_request_wakeup 7 1 0 1\n") < 0)
+				return -1;
+		}
+		else if (strcmp(argv[i], "dbg0-dump") == 0) {
+			zynqmp_dbg_dump(fd, R5_DBG_0_BASEADDR);
+		}
+		else if (strcmp(argv[i], "dbg0-halt") == 0) {
+			zynqmp_dbg_halt(fd, R5_DBG_0_BASEADDR);
+		}
+		else if (strcmp(argv[i], "dbg0-restart") == 0) {
+			zynqmp_dbg_restart(fd, R5_DBG_0_BASEADDR);
+		}
+		else if (strcmp(argv[i], "dbg0-reset") == 0) {
+			zynqmp_dbg_reset(fd, R5_DBG_0_BASEADDR);
+		}
+		else if (strcmp(argv[i], "gdbserver") == 0) {
+			struct dbg_port dbg;
+
+			dbg.dap = zynqmp_map_dbg_r5(fd, R5_DBG_0_BASEADDR);
+			if (dbg.dap == NULL)
+				return -1;
+
+			gdb_r5_server(&dbg, argc - i, argv + i);
+			i = argc;
+		}
+		else
+			printf ("unknown subcommand %s\n", argv[i]);
+	}
+	close(fd);
+	return 0;
+}
+
+static int dbg_init_rpu(struct dbg_port *dbg, unsigned r5_addr, int *argc, char *argv[])
+{
+        /* Decode board options and open the board. */
+        if (board_open(argc, argv) < 0)
+		return -1;
+
+	if (board->map == NULL) {
+		fprintf(stderr, "gdbserver-rpu not support on board %s\n",
+			board->name);
+		return -1;
+	}
+	dbg->dap = board->map(board, r5_addr);
+	if (dbg->dap == NULL)
+		return -1;
+
+	return 0;
+}
+
+static int do_gdbserver_rpu(unsigned r5_addr, int argc, char *argv[])
+{
+	struct dbg_port dbg;
+
+	if (dbg_init_rpu(&dbg, r5_addr, &argc, argv) < 0)
+		return -1;
+
+	gdb_r5_server(&dbg, argc, argv);
+
+        board->fini(board);
+        return 0;
+}
+
+static int do_gdbserver_rpu0(int argc, char *argv[])
+{
+	return do_gdbserver_rpu(R5_DBG_0_BASEADDR, argc, argv);
+}
+
+static int do_gdbserver_rpu1(int argc, char *argv[])
+{
+	return do_gdbserver_rpu(R5_DBG_1_BASEADDR, argc, argv);
+}
+
+static int do_check_dbg_rpu(unsigned cpu_idx, int argc, char *argv[])
+{
+	struct dbg_port dbg;
+	void *regs;
+	unsigned dscr;
+	unsigned timeout;
+	unsigned lsr;
+	unsigned prsr;
+	unsigned r5_addr = R5_DBG_0_BASEADDR | (cpu_idx << 13);
+	unsigned rst_lpd;
+	unsigned val;
+
+	/* Map CRL */
+	if (dbg_init_rpu(&dbg, RPU_BASEADDR, &argc, argv) < 0)
+		return -1;
+	regs = dbg.dap;
+
+	val = *(volatile unsigned *)(regs + RPU_RPU_GLBL_CNTL);
+	printf ("RPU glbl_cntl:    0x%08x\n", val);
+	val = *(volatile unsigned *)(regs + RPU_RPU_0_CFG);
+	printf ("RPU rpu0_cfg:     0x%08x\n", val);
+	val = *(volatile unsigned *)(regs + RPU_RPU_0_STATUS);
+	printf ("RPU rpu0_status:  0x%08x\n", val);
+	val = *(volatile unsigned *)(regs + RPU_RPU_1_CFG);
+	printf ("RPU rpu1_cfg:     0x%08x\n", val);
+	val = *(volatile unsigned *)(regs + RPU_RPU_1_STATUS);
+	printf ("RPU rpu1_status:  0x%08x\n", val);
+
+	{
+		unsigned off = cpu_idx == 1 ? RPU_RPU_1_CFG : RPU_RPU_0_CFG;
+		val = *(volatile unsigned *)(regs + off);
+		if (!(val & 1)) {
+			printf ("set /CPUHALT\n");
+			*(volatile unsigned *)(regs + off) = 1;
+		}
+	}
+
+	regs = board->map(board, CRL_APB_BASEADDR);
+	if (regs == NULL)
+		return -1;
+
+	rst_lpd = *(volatile unsigned *)(regs + CRL_APB_RST_LPD_TOP);
+	printf ("CRL_APB RST_LPD_TOP: %08x\n", rst_lpd);
+	if (rst_lpd & (1 << cpu_idx)) {
+	    printf ("CPU under reset\n");
+	    rst_lpd &= ~(1 << cpu_idx);
+	    *(volatile unsigned *)(regs + CRL_APB_RST_LPD_TOP) = rst_lpd;
+	}
+
+	val = *(volatile unsigned *)(regs + CRL_APB_CPU_R5_CTRL);
+	printf ("CRL_APB cpu_r5_ctrl:  0x%08x\n", val);
+
+	regs = board->map(board, r5_addr);
+	if (regs == NULL)
+		return -1;
+
+	dbg.dap = regs;
+
+	prsr = dbg_r5_read_dbgreg(regs, R5_DBG_PRSR);
+	if (!(prsr & 1)) {
+		printf ("CPU is powered-down (prsr: %02x)\n", prsr);
+		return -1;
+	}
+	if (prsr & 4) {
+		printf ("CPU is held in reset (prsr: %02x)\n", prsr);
+		return -1;
+	}
+
+	dbg_r5_dump(regs);
+
+	lsr = dbg_r5_read_dbgreg(regs, R5_DBG_LSR);
+	if (lsr & 2) {
+		printf ("unlock write access\n");
+		dbg_r5_unlock_access(regs);
+	}
+
+	dscr = dbg_r5_read_dscr(regs);
+
+	if (!(dscr & DSCR_HDBGen)) {
+		printf ("Enable halting debug-mode\n");
+		dbg_r5_write_dscr(regs, dscr | DSCR_HDBGen);
+		dscr = dbg_r5_read_dscr(regs);
+		if (!(dscr & DSCR_HDBGen)) {
+			printf ("failed to set HDBGen\n");
+			return -1;
+		}
+	}
+	else
+		printf ("Halting debug-mode already enabled\n");
+
+	if (dscr & DSCR_HALTED)
+		printf ("Target is already halted!\n");
+	else {
+		printf ("Request to halt...");
+		fflush(stdout);
+
+		/* Request to halt */
+		dbg_r5_write_drcr(regs, 1);
+
+		for (timeout = 10; timeout > 0; timeout--) {
+			dscr = dbg_r5_read_dscr(regs);
+			if (dscr & 1)
+				break;
+			usleep(1);
+		}
+		if (timeout == 0) {
+			printf("cannot halt target!\n");
+
+			if (dscr & DSCR_PipeAdv) {
+				printf ("Clear PipeAdv\n");
+				dbg_r5_write_drcr(regs, 8);
+				dscr = dbg_r5_read_dscr(regs);
+				if (dscr & DSCR_PipeAdv) {
+					printf ("failed to clear PipeAdv\n");
+					return -1;
+				}
+			}
+			printf ("Try to cancel memory request\n");
+			dbg_r5_write_drcr(regs, 0x11);
+
+			dscr = dbg_r5_read_dscr(regs);
+			if (!(dscr & 1)) {
+				printf ("Failed to halt\n");
+				return -1;
+			}
+		}
+		printf ("target halted\n");
+	}
+
+	if (!(dscr & DSCR_InstrCompl)) {
+		printf ("DSCR.InstrCompl not set: "
+			"cpu is executing an ITR instruction\n");
+		return -1;
+	}
+
+	if (dscr & DSCR_PipeAdv) {
+		printf ("Clear PipeAdv\n");
+		dbg_r5_write_drcr(regs, 8);
+		dscr = dbg_r5_read_dscr(regs);
+		if (dscr & DSCR_PipeAdv) {
+			printf ("failed to clear PipeAdv\n");
+			return -1;
+		}
+	}
+
+	if (dscr & (DSCR_SDABORT_I | DSCR_ADABORT_I | DSCR_UND_I)) {
+		printf("clear sticky exception bit\n");
+		dbg_r5_write_drcr(regs, 4);
+		dscr = dbg_r5_read_dscr(regs);
+		if (dscr & (DSCR_SDABORT_I | DSCR_ADABORT_I | DSCR_UND_I)) {
+			printf ("failed to clear sticky exception bit\n");
+			return -1;
+		}
+	}
+
+	if (dscr & DSCR_ITRen)
+		printf ("ITRen is already set!\n");
+	else {
+		dbg_r5_write_dscr(regs, dscr | DSCR_ITRen);
+		dscr = dbg_r5_read_dscr(regs);
+		if (!(dscr & DSCR_ITRen)) {
+			printf ("failed to set ITRen\n");
+			return -1;
+		}
+	}
+
+	printf ("Try to execute an instruction... ");
+	fflush(stdout);
+	dbg_r5_write_dbgreg(regs, R5_DBG_ITR, 0xe320f000); // nop
+	for (timeout = 10; timeout > 0; timeout--) {
+		dscr = dbg_r5_read_dscr(regs);
+		if (dscr & DSCR_InstrCompl)
+			break;
+		usleep(1);
+	}
+	if (timeout == 0) {
+		printf ("failed (timeout)\n");
+		return -1;
+	}
+	if (!(dscr & DSCR_PipeAdv)) {
+		printf ("PipeAdv is not set after instruction execution\n");
+		return -1;
+	}
+	printf ("OK!\n");
+
+	if (dscr & DSCR_TXfull) {
+		printf ("TXfull is set\n");
+		dbg_r5_read_dbgreg(regs, R5_DBG_DTRTXext);
+		dscr = dbg_r5_read_dscr(regs);
+		if (dscr & DSCR_TXfull) {
+			printf ("Failed to clear TXfull\n");
+			return -1;
+		}
+	}
+	if (dscr & DSCR_RXfull) {
+		unsigned r0;
+
+		printf ("RXfull is set\n");
+		r0 = dbg_r5_read_reg(regs, 0);
+		dbg_r5_exec_dcc_to_reg(regs, 0);
+		dscr = dbg_r5_read_dscr(regs);
+		if (dscr & DSCR_RXfull) {
+			printf("cannot cleat RXfull\n");
+			return -1;
+		}
+		dbg_r5_write_reg(regs, 0, r0);
+	}
+
+	/* read BTCM region register
+	   mrc p15, 0, r0, cr9, cr1, 0 */
+	dbg_r5_exec_insn(regs, 0xee190f11);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("BTCM: %08x\n", val);
+
+	/* read ATCM region register
+	   mrc p15, 0, r0, cr9, cr1, 1 */
+	dbg_r5_exec_insn(regs, 0xee190f31);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("ATCM: %08x\n", val);
+
+	/* read SACR region register
+	   mrc	15, 0, r0, cr15, cr0, {0} */
+	dbg_r5_exec_insn(regs, 0xee1f0f10);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("SACR: %08x\n", val);
+
+	/* Read DFSR Data Fault Status Register
+	   mrc	15, 0, r0, cr5, cr0, {0} */
+	dbg_r5_exec_insn(regs, 0xee150f10);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("DFSR: %08x\n", val);
+
+	/* Read DFAR Data Fault Address Register
+	   mrc	15, 0, r0, cr6, cr0, {0} */
+	dbg_r5_exec_insn(regs, 0xee160f10);
+	dbg_r5_exec_reg_to_dcc(regs, 0);
+	val = dbg_r5_read_dcc(regs);
+	printf ("DFAR: %08x\n", val);
+
+        board->fini(board);
+        return 0;
+}
+
+static void help_check_dbg(const char *cmd)
+{
+	fprintf(stderr, "usage: %s %s BOARD-OPTIONS [options]\n",
+		progname, cmd);
+}
+
+static int do_check_dbg_rpu0(int argc, char *argv[])
+{
+	return do_check_dbg_rpu(0, argc, argv);
+}
+
+static int do_check_dbg_rpu1(int argc, char *argv[])
+{
+	return do_check_dbg_rpu(1, argc, argv);
+}
+
+static int do_clear_tcm_rpu(unsigned cpu_idx, int argc, char *argv[])
+{
+	/* Enable FPU and clear d0 */
+	static const uint32_t r5_fpu_init [] = {
+		0xee110f50, 	// mrc	15, 0, r0, cr1, cr0, {2}
+		0xe380060f, 	// orr	r0, r0, #(0xf << 20)	@ 0xf00000
+		0xee010f50,	// mcr	15, 0, r0, cr1, cr0, {2}
+		0xf57ff06f,	// isb	sy
+		0xeef83a10,	// vmrs	r3, fpexc
+		0xe3831101,	// orr	r1, r3, #(1<<30)	@ 0x40000000
+		0xeee81a10,	// vmsr	fpexc, r1
+		0xe3a01000,	// mov	r1, #0
+		0xec411b10,	// vmov	d0, r1, r1
+		0
+	};
+
+	struct dbg_port dbg;
+	void *regs;
+	unsigned r5_addr = R5_DBG_0_BASEADDR | (cpu_idx << 13);
+	unsigned i;
+
+	/* Map CRL */
+	if (dbg_init_rpu(&dbg, r5_addr, &argc, argv) < 0)
+		return -1;
+	regs = dbg.dap;
+
+	if (dbg_r5_halt(regs) < 0)
+		return -1;
+
+	for (i = 0; r5_fpu_init[i]; i++)
+		dbg_r5_exec_insn(regs, r5_fpu_init[i]);
+
+	/* Clear ATCM */
+	dbg_r5_write_reg(regs, 0, 0);
+	for (i = 0; i < 0x10000 / 8; i++) {
+		/* vstr    d0, [r0] */
+		dbg_r5_exec_insn(regs, 0xed800b00);
+
+		/* add     r0, r0, #8 */
+		dbg_r5_exec_insn(regs, 0xe2800008);
+	}
+
+	/* Clear BTCM */
+	dbg_r5_write_reg(regs, 0, 0x20000);
+	for (i = 0; i < 0x10000 / 8; i++) {
+		/* vstr    d0, [r0] */
+		dbg_r5_exec_insn(regs, 0xed800b00);
+
+		/* add     r0, r0, #8 */
+		dbg_r5_exec_insn(regs, 0xe2800008);
+
+		/* strd    r0, [r2], #8 */
+		/* dbg_r5_exec_insn(regs, 0xe0c200f8); */
+	}
+
+	return 0;
+}
+
+static int do_clear_tcm_rpu0(int argc, char *argv[])
+{
+	return do_clear_tcm_rpu(0, argc, argv);
+}
+
+static int do_clear_tcm_rpu1(int argc, char *argv[])
+{
+	return do_clear_tcm_rpu(1, argc, argv);
+}
+
+static void help_clear_tcm(const char *cmd)
+{
+	fprintf(stderr, "usage: %s %s BOARD-OPTIONS [options]\n",
+		progname, cmd);
+}
+
+static void do_rpu_dfault(struct dbg_port *dbg, int argc, char **argv)
+{
+	void *regs = dbg->dap;
+
+	if (dbg_r5_halt(regs) < 0)
+		return;
+
+	dbg_r5_disp_dfault(regs);
+}
+
+static void do_rpu_tcm(struct dbg_port *dbg, int argc, char **argv)
+{
+	void *regs = dbg->dap;
+
+	if (dbg_r5_halt(regs) < 0)
+		return;
+
+	dbg_r5_disp_tcm(regs);
+}
+
+static void do_rpu_mpu(struct dbg_port *dbg, int argc, char **argv)
+{
+	void *regs = dbg->dap;
+
+	if (dbg_r5_halt(regs) < 0)
+		return;
+
+	dbg_r5_disp_mpu(regs);
+}
+
+static int parse_uns(const char *str, char *name, unsigned *res)
+{
+	char *e;
+
+	*res = strtoul(str, &e, 0);
+	if (*e != 0) {
+		printf ("cannot parse %s '%s'\n", name, str);
+		return -1;
+	}
+	return 0;
+}
+
+static void do_rpu_rd(struct dbg_port *dbg, int argc, char **argv)
+{
+	void *regs = dbg->dap;
+	unsigned val, r0, r1;
+	unsigned addr, len;
+
+	if (argc < 2) {
+		printf ("missing address\n");
+		return;
+	}
+
+	if (parse_uns(argv[1], "address", &addr) < 0)
+		return;
+
+	if (argc > 2) {
+		if (parse_uns(argv[2], "length", &len) < 0)
+			return;
+	}
+	else
+		len = 1;
+
+	if (dbg_r5_halt(regs) < 0)
+		return;
+
+	r0 = dbg_r5_read_reg(dbg->dap, 0);
+	r1 = dbg_r5_read_reg(dbg->dap, 1);
+
+	dbg_r5_write_reg(dbg->dap, 0, addr);
+
+	for (; len != 0; len--) {
+		printf("[%08x]=", addr);
+
+		/* ldrb r1,[r0],1 */
+		dbg_r5_exec_insn(dbg->dap, 0xe4d01001);
+		if (gdb_check_mem_fault(dbg, addr) < 0)
+			printf("Fault\n");
+		else {
+			val = dbg_r5_read_reg(dbg->dap, 1);
+			printf("%02x\n", val);
+		}
+
+		addr++;
+	}
+	dbg_r5_write_reg(dbg->dap, 0, r0);
+	dbg_r5_write_reg(dbg->dap, 1, r1);
+}
+
+static void do_rpu_wr(struct dbg_port *dbg, int argc, char **argv)
+{
+	void *regs = dbg->dap;
+	unsigned val, r0, r1;
+	unsigned addr;
+
+	if (argc < 3) {
+		printf ("missing address value\n");
+		return;
+	}
+
+	if (parse_uns(argv[1], "address", &addr) < 0)
+		return;
+
+	if (parse_uns(argv[2], "value", &val) < 0)
+		return;
+
+	if (dbg_r5_halt(regs) < 0)
+		return;
+
+	r0 = dbg_r5_read_reg(dbg->dap, 0);
+	r1 = dbg_r5_read_reg(dbg->dap, 1);
+
+	dbg_r5_write_reg(dbg->dap, 0, addr);
+	dbg_r5_write_reg(dbg->dap, 1, val);
+
+	/* str r1,[r0],#4 */
+	dbg_r5_exec_insn(dbg->dap, 0xe4801004);
+
+	if (gdb_check_mem_fault(dbg, addr) < 0)
+		printf("Fault\n");
+
+	dbg_r5_write_reg(dbg->dap, 0, r0);
+	dbg_r5_write_reg(dbg->dap, 1, r1);
+}
+
+struct tool_rpu {
+	const char *name;
+	const char *short_help;
+	void (*run)(struct dbg_port *dbg, int argc, char **argv);
+};
+
+static struct tool_rpu tools_rpu[] = {
+  {
+	  "dfault",
+	  "disp data fault registers",
+	  do_rpu_dfault
+  },
+  {
+	  "tcm",
+	  "disp TCM registers",
+	  do_rpu_tcm
+  },
+  {
+	  "mpu",
+	  "disp MPU registers",
+	  do_rpu_mpu
+  },
+  {
+	  "rd",
+	  "ADDR [LEN]: read memory",
+	  do_rpu_rd
+  },
+  {
+	  "wr",
+	  "ADDR VAL: write memory",
+	  do_rpu_wr
+  },
+  {
+	  NULL, NULL, NULL
+  }
+};
+
+static int do_rpu(unsigned cpu_idx, int argc, char *argv[])
+{
+	struct dbg_port dbg;
+	const struct tool_rpu *cmd;
+	unsigned r5_addr = R5_DBG_0_BASEADDR | (cpu_idx << 13);
+	unsigned i;
+
+	if (dbg_init_rpu(&dbg, r5_addr, &argc, argv) < 0)
+		return -1;
+
+	if (argc == 1) {
+		printf("%s %s: missing sub-command\n", progname, argv[0]);
+		for (i = 0; tools_rpu[i].name; i++)
+			printf ("%-8s  %s\n", tools_rpu[i].name, tools_rpu[i].short_help);
+		return -1;
+	}
+
+	cmd = NULL;
+	for (i = 0; tools_rpu[i].name; i++)
+		if (!strcmp(tools_rpu[i].name, argv[1])) {
+			cmd = &tools_rpu[i];
+			break;
+		}
+	if (cmd == NULL) {
+		printf ("%s %s: unknown command '%s'\n", progname, argv[0], argv[1]);
+		return -1;
+	}
+
+
+	remove_arg1(&argc, argv);
+
+	(*cmd->run)(&dbg, argc, argv);
+
+	board->fini(board);
+
+	return 0;
+}
+
+static int do_rpu0(int argc, char *argv[])
+{
+	return do_rpu(0, argc, argv);
+}
+
+static int do_rpu1(int argc, char *argv[])
+{
+	return do_rpu(1, argc, argv);
+}
+
+static void help_rpu(const char *cmd)
+{
+	fprintf(stderr, "usage: %s %s SUB-CMD BOARD-OPTIONS [options]\n",
+		progname, cmd);
+}
+
+static int do_rd(int argc, char *argv[])
+{
+	unsigned pg = getpagesize();
+	unsigned *ptr;
+	unsigned addr = 0xff040000;
+
+        /* Decode board options and open the board. */
+        if (board_open(&argc, argv) < 0)
+		return -1;
+
+	if (argc > 2 && !strcmp(argv[1], "-a")) {
+		addr = strtoul(argv[2], NULL, 0);
+	}
+
+	if (board->map == NULL) {
+		fprintf(stderr, "gdbserver-rpu not support on board %s\n",
+			board->name);
+		return -1;
+	}
+	ptr = board->map(board, addr & ~(pg - 1));
+	if (ptr == NULL)
+		return -1;
+
+	ptr += (addr & (pg - 1)) >> 2;
+	printf("[%08x] = %08x\n", addr, *ptr);
+
+        board->fini(board);
+        return 0;
+}
+
+static void help_rd(const char *cmd)
+{
+        printf("usage: %s rd BOARD-OPTIONS\n", progname);
+}
 
 static const struct tool_base tool_help = {
         "help",
@@ -4371,6 +6702,75 @@ static const struct tool_base tool_gdbserver = {
         help_gdbserver
 };
 
+static const struct tool_base tool_gdbserver_rpu0 = {
+        "gdbserver-rpu0",
+        "cortex-r5 gdb-server for ZynqUS+ RPU0",
+        do_gdbserver_rpu0,
+        help_gdbserver
+};
+
+static const struct tool_base tool_gdbserver_rpu1 = {
+        "gdbserver-rpu1",
+        "cortex-r5 gdb-server for ZynqUS+ RPU1",
+        do_gdbserver_rpu1,
+        help_gdbserver
+};
+
+static const struct tool_base tool_check_dbg_rpu0 = {
+        "checkdbg-rpu0",
+        "Check debug port of cortex-r5 ZynqUS+ RPU0",
+        do_check_dbg_rpu0,
+        help_check_dbg
+};
+
+static const struct tool_base tool_check_dbg_rpu1 = {
+        "checkdbg-rpu1",
+        "Check debug port of cortex-r5 ZynqUS+ RPU1",
+        do_check_dbg_rpu1,
+        help_check_dbg
+};
+
+static const struct tool_base tool_clear_tcm_rpu0 = {
+        "clear-tcm-rpu0",
+        "Check ATCM and BTCM of cortex-r5 ZynqUS+ RPU0",
+        do_clear_tcm_rpu0,
+        help_clear_tcm
+};
+
+static const struct tool_base tool_clear_tcm_rpu1 = {
+        "clear-tcm-rpu1",
+        "Check ATCM and BTCM of cortex-r5 ZynqUS+ RPU1",
+        do_clear_tcm_rpu1,
+        help_clear_tcm
+};
+
+static const struct tool_base tool_rpu0 = {
+        "rpu0",
+        "Sub commands for cortex-r5 ZynqUS+ RPU0",
+        do_rpu0,
+        help_rpu
+};
+
+static const struct tool_base tool_rpu1 = {
+        "rpu1",
+        "Sub commands for cortex-r5 ZynqUS+ RPU1",
+        do_rpu1,
+        help_rpu
+};
+
+static const struct tool_base tool_rd = {
+        "rd",
+        "Read a word on the local bus",
+        do_rd,
+        help_rd
+};
+
+static const struct tool_base tool_zynqmp_rpu = {
+        "zynqmp-rpu",
+        "display RPU status on zynqmp",
+        do_zynqmp_rpu,
+        help_zynqmp_rpu,
+};
 
 #ifndef SUPPORT_WRS
 static const struct tool_base tool_wdiags = {
@@ -4402,6 +6802,16 @@ static const struct tool_base *tools[] = {
 	&tool_spll_recorder,
 	&tool_spll_display,
 	&tool_gdbserver,
+	&tool_gdbserver_rpu0,
+	&tool_gdbserver_rpu1,
+	&tool_rd,
+	&tool_check_dbg_rpu0,
+	&tool_check_dbg_rpu1,
+	&tool_clear_tcm_rpu0,
+	&tool_clear_tcm_rpu1,
+	&tool_rpu0,
+	&tool_rpu1,
+	&tool_zynqmp_rpu,
 #ifndef SUPPORT_WRS
 	&tool_wdiags,
         &tool_aux_logger,
