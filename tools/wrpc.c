@@ -1153,7 +1153,40 @@ static Elf32_Word read_elf_word (const Elf32_Word *v)
   return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);   /* LE  */
 }
 
-static int wrc_load_elf(const struct wrc_cpu *cpu, struct board *board, const char *filename, int fd)
+#ifndef EM_RISCV
+#define EM_RISCV	0xF3
+#endif
+
+struct wrc_elf_load_cb_data {
+	const struct wrc_cpu *cpu;
+	struct board *board;
+};
+
+static int wrc_elf_load_cb (void *data, unsigned char *buf,
+			    unsigned len, unsigned vaddr)
+{
+	struct wrc_elf_load_cb_data *d = (struct wrc_elf_load_cb_data *)data;
+
+	return wrc_write_buf(d->cpu, d-> board, buf, len, vaddr);
+}
+
+static int elf_dump_cb (void *data, unsigned char *buf,
+			unsigned len, unsigned vaddr)
+{
+	for (unsigned i = 0; i < len; i++) {
+		if (i % 16 == 0)
+			printf ("%08x:", vaddr + i);
+		printf (" %02x", buf[i]);
+		if (i % 16 == 15 || i == len - 1)
+			printf("\n");
+	}
+	return 0;
+}
+
+static int elf_foreach_segment_fd(const char *filename, int fd, unsigned mach,
+				  int (*cb)(void *data, unsigned char *buf,
+					    unsigned len, unsigned vaddr),
+				  void *data)
 {
         Elf32_Ehdr ehdr;
         unsigned poff;
@@ -1183,10 +1216,16 @@ static int wrc_load_elf(const struct wrc_cpu *cpu, struct board *board, const ch
         }
 
         if (read_elf_half (&ehdr.e_type) != ET_EXEC
-            || read_elf_half (&ehdr.e_machine) != 0xf3
             || read_elf_word (&ehdr.e_version) != EV_CURRENT) {
                 fprintf (stderr,
-                         "file %s is not a risc-v executable\n", filename);
+                         "file %s is not an executable\n", filename);
+                return -1;
+        }
+
+	if (read_elf_half (&ehdr.e_machine) != mach) {
+                fprintf (stderr,
+                         "file %s has incorrect machine (0x%x)\n",
+			 filename, mach);
                 return -1;
         }
 
@@ -1247,7 +1286,7 @@ static int wrc_load_elf(const struct wrc_cpu *cpu, struct board *board, const ch
                                 return -1;
                         }
 
-                        if (wrc_write_buf(cpu, board, buf, l, vaddr + len) < 0)
+                        if (cb (data, buf, l, vaddr + len) < 0)
                                 return -1;
                         len += l;
                 }
@@ -1255,6 +1294,26 @@ static int wrc_load_elf(const struct wrc_cpu *cpu, struct board *board, const ch
                 /* TODO: do we want to clear until memsz ? */
         }
         return 0;
+}
+
+static int elf_foreach_segment(const char *filename, unsigned mach,
+			       int (*cb)(void *data, unsigned char *buf,
+					 unsigned len, unsigned vaddr),
+			       void *data)
+{
+	int fd;
+	int res;
+
+	fd = open(filename, O_RDONLY);
+	if (fd < 0) {
+		fprintf(stderr, "cannot open %s\n", filename);
+		return -1;
+	}
+
+	res = elf_foreach_segment_fd(filename, fd, mach, cb, data);
+	close (fd);
+
+	return res;
 }
 
 static int wrc_load_firmware(const struct wrc_cpu *cpu, struct board *board, const char *filename)
@@ -1279,7 +1338,12 @@ static int wrc_load_firmware(const struct wrc_cpu *cpu, struct board *board, con
 
 	if (hdr[0] == 0x7f
 	    && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F') {
-                if (wrc_load_elf(cpu, board, filename, fd) < 0)
+		struct wrc_elf_load_cb_data cd;
+		cd.cpu = cpu;
+		cd.board = board;
+
+                if (elf_foreach_segment_fd(filename, fd, EM_RISCV,
+					   wrc_elf_load_cb, &cd) < 0)
                         goto err_close;
 	}
         else {
