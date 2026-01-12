@@ -1834,6 +1834,8 @@ static void wrpc_vuart_only_read(struct board *board,
 static void wrpc_vuart_debug(struct board *board)
 {
 	int print = 1;
+	fd_set fds;
+	int ret;
 
 	while(1) {
 		int rdr = vuart_readl(board, UART_REG_HOST_RDR );
@@ -1848,9 +1850,37 @@ static void wrpc_vuart_debug(struct board *board)
 			       (rdr & UART_HOST_RDR_COUNT_MASK)
 			         >> UART_HOST_RDR_COUNT_SHIFT);
 			print = rdy;
+			continue;
 		}
-		else
-			usleep(1000);
+
+		struct timeval tv = {0, 10000}; /* 10ms */
+		FD_ZERO(&fds);
+		FD_SET(STDIN_FILENO, &fds);
+
+		ret = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+		if (ret < 0) {
+			perror("select");
+			return;
+		}
+		if (ret == 0) {
+			/* timeout */
+			continue;
+		}
+		if (FD_ISSET(STDIN_FILENO, &fds)) {
+			unsigned char tx;
+			/* The user wrote something */
+			do {
+				ret = read(STDIN_FILENO, &tx, 1);
+			} while (ret < 0 && errno == EINTR);
+
+			int sr = vuart_readl(board, UART_REG_HOST_TDR);
+			printf ("TDR: %08x ...", sr);
+			if (sr & UART_HOST_TDR_RDY) {
+				vuart_writel(board, UART_HOST_TDR_DATA_W(tx), UART_REG_HOST_TDR);
+			}
+			sr = vuart_readl(board, UART_REG_HOST_TDR);
+			printf ("%08x\n", sr);
+		}
 	}
 }
 
