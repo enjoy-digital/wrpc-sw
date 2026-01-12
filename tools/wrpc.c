@@ -2132,9 +2132,9 @@ static const char *dbg_signal_to_string(int src)
 	case SPLL_DBG_SIGNAL_TIME_MS:
 		return "time_ms";
 	case SPLL_DBG_SIGNAL_PHASE_CURRENT:
-		return "phase_current";
+		return "ph_cur";
 	case SPLL_DBG_SIGNAL_PHASE_TARGET:
-		return "phase_target";
+		return "ph_targ";
 	case SPLL_DBG_SIGNAL_SRC:
 		return "source";
 	default:
