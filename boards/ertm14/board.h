@@ -37,7 +37,7 @@
 #undef BOARD_ERTM14_REV_1
 #define BOARD_ERTM14_REV_2
 
-#define BOARD_CONSOLE_DEVICES 2
+#define BOARD_EXTRA_CONSOLES 1
 
 #define BOARD_USE_EVENTS 1
 
@@ -62,6 +62,9 @@
 
 /* Socket buffer size, determines the max. RX packet size */
 #define NET_MAX_SKBUF_SIZE 512
+
+/* Enable SW SPLL fifo */
+#define BOARD_SPLL_DEBUG_QUEUE 1
 
 /* spll parameter that are board-specific */
 #  define BOARD_DIVIDE_DMTD_CLOCKS	0

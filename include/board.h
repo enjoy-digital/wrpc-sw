@@ -27,6 +27,7 @@
 #define BASE_PPS_GEN            (DEV_BASE + 0x300)
 #define BASE_SYSCON             (DEV_BASE + 0x400)
 #define BASE_UART               (DEV_BASE + 0x500)
+#define BASE_VUART              (DEV_BASE + 0x580)
 #define BASE_ONEWIRE            (DEV_BASE + 0x600)
 #define BASE_TIMECODE           (DEV_BASE + 0x700)
 #define BASE_WDIAGS_PRIV        (DEV_BASE + 0x900)

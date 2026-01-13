@@ -150,7 +150,7 @@ void spll_set_ptracker_average_samples(int channel, int nsamples);
 
 void spll_update_ext_pps_latency_ps(int offset_ps);
 
-int spll_get_debug_queue_samples( uint32_t *buf, int *count );
+int spll_get_debug_queue_samples( uint32_t *buf, unsigned count );
 void spll_debug_queue_configure( int undersample, int coalsesce_threshold );
 
 void spll_set_aux_mode( int channel, int mode );

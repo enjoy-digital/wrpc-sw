@@ -38,8 +38,6 @@
 
 #define BOARD_USE_EVENTS 0
 
-#define BOARD_CONSOLE_DEVICES 1
-
 #define CONSOLE_UART_BAUDRATE 115200
 
 /* i2c eeproms address */

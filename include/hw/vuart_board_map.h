@@ -1,0 +1,38 @@
+#ifndef __CHEBY__VUART_BOARD_MAP__H__
+#define __CHEBY__VUART_BOARD_MAP__H__
+
+#define VUART_BOARD_MAP_SIZE 8 /* 0x8 */
+
+/* Board VUART Tx register */
+#define VUART_BOARD_MAP_TDR 0x0UL
+#define VUART_BOARD_MAP_TDR_DATA_MASK 0xffUL
+#define VUART_BOARD_MAP_TDR_DATA_SHIFT 0
+#define VUART_BOARD_MAP_TDR_RDY 0x100UL
+#define VUART_BOARD_MAP_TDR_RDY_MASK 0x100UL
+#define VUART_BOARD_MAP_TDR_RDY_SHIFT 8
+#define VUART_BOARD_MAP_TDR_ZERO_MASK 0xfffffe00UL
+#define VUART_BOARD_MAP_TDR_ZERO_SHIFT 9
+#define VUART_BOARD_MAP_TDR_ZERO_PRESET 0x0UL
+
+/* Board VUART Rx register */
+#define VUART_BOARD_MAP_RDR 0x4UL
+#define VUART_BOARD_MAP_RDR_DATA_MASK 0xffUL
+#define VUART_BOARD_MAP_RDR_DATA_SHIFT 0
+#define VUART_BOARD_MAP_RDR_RDY 0x100UL
+#define VUART_BOARD_MAP_RDR_RDY_MASK 0x100UL
+#define VUART_BOARD_MAP_RDR_RDY_SHIFT 8
+#define VUART_BOARD_MAP_RDR_ZERO_MASK 0xfffffe00UL
+#define VUART_BOARD_MAP_RDR_ZERO_SHIFT 9
+#define VUART_BOARD_MAP_RDR_ZERO_PRESET 0x0UL
+
+#ifndef __ASSEMBLER__
+struct vuart_board_map {
+  /* [0x0]: REG (rw) Board VUART Tx register */
+  uint32_t TDR;
+
+  /* [0x4]: REG (ro) Board VUART Rx register */
+  uint32_t RDR;
+};
+#endif /* !__ASSEMBLER__*/
+
+#endif /* __CHEBY__VUART_BOARD_MAP__H__ */

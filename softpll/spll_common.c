@@ -126,8 +126,86 @@ void spll_enable_tagger(int channel, int enable)
 	pll_verbose("%s: ch %d, OCER 0x%x, RCER 0x%x\n", __FUNCTION__, channel, SPLL->OCER, SPLL->RCER);
 }
 
-void spll_debug(int src, int what, int value, int last)
+#ifdef BOARD_SPLL_DEBUG_QUEUE
+
+/* Depth of the SW fifo */
+#define DEBUG_QUEUE_SIZE 1024
+
+static struct spll_debug_queue_state
 {
-	SPLL->DFR_SPLL =
-	    (last ? 0x80000000 : 0) | (value & 0xffffff) | (src << 28) | (what << 24);
+	/* Undersampling.  Keep only 1 entry every RATIO for each source */
+	unsigned undersample_ratio;
+	/* Counter for undersampling.  Only store when the count is 0 */
+	unsigned undersample_count;
+	/* Do not return less than this threshold */
+	unsigned coalesce_threshold;
+	/* The memory.  */
+	uint32_t queue[DEBUG_QUEUE_SIZE];
+	unsigned count;
+	unsigned head;
+} dbg_state;
+
+
+void spll_debug_queue_configure(int undersample, int coalsesce_threshold)
+{
+	/* Set values */
+	dbg_state.undersample_ratio = undersample;
+	dbg_state.coalesce_threshold = coalsesce_threshold;
+
+	/* Reinitialize */
+	dbg_state.undersample_count = 0;
+	dbg_state.count = 0;
+	dbg_state.head = 0;
+}
+
+int spll_get_debug_queue_samples(uint32_t *buf, unsigned max_count)
+{
+	int res = 0;
+	struct spll_debug_queue_state *st = &dbg_state;
+
+	/* Return now if not enough samples.  */
+	if( st->count < st->coalesce_threshold )
+		return 0;
+
+	while(1)
+	{
+		if(st->count == 0 || res == max_count)
+			break;
+
+		*buf++ = st->queue[st->head];
+		st->count--;
+		st->head = (st->head + 1) % DEBUG_QUEUE_SIZE;
+		res++;
+	}
+
+	return res;
+}
+#endif
+
+void spll_debug(int src, int signal, int value, int last)
+{
+	uint32_t w = (last ? 0x80000000 : 0) | (value & 0xffffff) | (src << 28) | (signal << 24);
+
+#ifdef BOARD_SPLL_DEBUG_QUEUE
+	/* Push to SW fifo */
+	struct spll_debug_queue_state *st = &dbg_state;
+	if (signal == SPLL_DBG_SIGNAL_EVENT
+	    || st->undersample_count == 0) {
+		/* Keep */
+		if (st->count < DEBUG_QUEUE_SIZE) {
+			unsigned ptr;
+			ptr = (st->head + st->count) % DEBUG_QUEUE_SIZE;
+			st->queue[ptr] = w;
+			st->count++;
+		}
+	}
+	if (last) {
+		st->undersample_count++;
+		if (st->undersample_count >= st->undersample_ratio)
+			st->undersample_count = 0;
+	}
+#else
+	/* Push to HW fifo */
+	SPLL->DFR_SPLL = w;
+#endif
 }

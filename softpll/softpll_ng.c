@@ -383,16 +383,7 @@ void spll_init(int mode, int slave_ref_channel, int flags)
 		(void) dummy;
 	}
 
-
-	/* Purge debug queue */
-	if ( SPLL->CSR & SPLL_CSR_DBG_SUPPORTED )
-	{
-		while (!(SPLL->DFR_HOST_CSR & SPLL_DFR_HOST_CSR_EMPTY))
-		{
-			dummy = SPLL->DFR_HOST_R0;
-			(void) dummy;
-		}
-	}
+	/* No need to purge the debug queue, it's done by the wrpc tool.  */
 
 	if(mode == SPLL_MODE_DISABLED)
 		return;
@@ -920,88 +911,6 @@ void spll_set_pi_gain_kp_ki(int loop, int kp, int ki)
 			break;
 	}
 	enable_irq();
-}
-
-static struct spll_debug_queue_state
-{
-	int undersample_ratio;
-	uint8_t undersample_count[SPLL_DBG_MAX_SOURCES];
-	uint8_t undersample_pass[SPLL_DBG_MAX_SOURCES];
-	int coalesce_threshold;
-} dbg_state;
-
-
-void spll_debug_queue_configure( int undersample, int coalsesce_threshold )
-{
-	int dummy, i;
-	while (!(SPLL->DFR_HOST_CSR & SPLL_DFR_HOST_CSR_EMPTY))
-		{
-			dummy = SPLL->DFR_HOST_R0;
-			(void) dummy;
-		}
-
-	dbg_state.undersample_ratio = undersample;
-	dbg_state.coalesce_threshold = coalsesce_threshold * undersample;
-
-	for(i=0;i<SPLL_DBG_MAX_SOURCES;i++)
-	{
-		dbg_state.undersample_count[i] = 0;
-		dbg_state.undersample_pass[i] = 0;
-		}
-}
-
-
-int spll_get_debug_queue_samples( uint32_t *buf, int *count )
-{
-	int n_ents = 0;
-	int latch_full = SPLL->DFR_HOST_CSR & SPLL_DFR_HOST_CSR_FULL;
-	int latch_count = SPLL_DFR_HOST_CSR_USEDW_R(SPLL->DFR_HOST_CSR);
-	struct spll_debug_queue_state *st = &dbg_state;
-
-	if( !latch_full && latch_count < dbg_state.coalesce_threshold )
-	{
-		*count = 0;
-		return 0;
-	}
-
-	while(1)
-	{
-		if ( SPLL->DFR_HOST_CSR & SPLL_DFR_HOST_CSR_EMPTY )
-			break;
-
-		if( n_ents == *count )
-			break;
-
-		volatile uint32_t v = SPLL->DFR_HOST_R0;
-		int signal = SPLL_DBG_EXTRACT_SIGNAL( v );
-		int src = SPLL_DBG_EXTRACT_SOURCE( v );
-
-		if(st->undersample_pass[src] || signal == SPLL_DBG_SIGNAL_EVENT )
-		{
-			*buf++ = v;
-			n_ents ++;
-		}
-
-		if( v & 0x80000000 ) // last entry in the record
-		{
-			st->undersample_count[src]++;
-			if (st->undersample_count[src] >= st->undersample_ratio)
-			{
-				st->undersample_count[src] = 0;
-				st->undersample_pass[src] = 1;
-			} else {
-				st->undersample_pass[src] = 0;
-			}
-		}
-
-	}
-
-	*count = n_ents;
-
-	if( latch_full )
-		return -ENOSPC;
-
-	return 0;
 }
 
 void spll_set_aux_mode( int channel, int mode )

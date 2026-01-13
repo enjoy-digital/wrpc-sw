@@ -60,7 +60,6 @@
 #define BOARD_USE_EVENTS 0
 
 /* Use one uart at 115200 baud. May add extra uart. */
-#define BOARD_CONSOLE_DEVICES 1
 #define CONSOLE_UART_BAUDRATE 115200
 
 /* Maximum number of files in the sdb filesystem.

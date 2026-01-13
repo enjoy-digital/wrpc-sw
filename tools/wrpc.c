@@ -42,7 +42,8 @@
 #include "hw/wrc_cpu_csr.h"
 #include "hw/wrc_syscon_regs.h"
 #include "hw/wb_uart.h"
-#include "hw/softpll_regs.h"
+#include "hw/spll_host_map.h"
+#include "hw/wrc_host_map.h"
 #include "hw/wrc_diags_regs.h"
 #include "hw/endpoint_regs.h"
 
@@ -56,11 +57,11 @@
 	#define OFFSET_CPU_CSR  	0x00010800
 	#define SIZE_FPGA 		0x20000
 	#define OFFSET_UART 		0x00010000
-	#define OFFSET_SOFTPLL  	0x00010100
+	#define OFFSET_SOFTPLL  	0x00010170
 #else
 	/* From include/boards.h */
 	#define OFFSET_ENDPOINT		0x100
-	#define OFFSET_SOFTPLL		0x200
+	#define OFFSET_SOFTPLL		WRC_HOST_MAP_SPLL
 	#define OFFSET_SYSCON		0x400
 	#define OFFSET_UART		0x500
 	#define OFFSET_WDIAGS		0x900
@@ -1053,19 +1054,19 @@ struct wrc_cpu {
 
 static void wrpc_v5_reset(struct board *board, unsigned int rst)
 {
-	board->writel (board, OFFSET_CPU_CSR + WRC_CPU_CSR_REG_RESET, rst);
+	board->writel (board, OFFSET_CPU_CSR + WRC_CPU_CSR_RESET, rst);
 }
 
 static void wrpc_v5_writel(struct board *board, unsigned int addr, uint32_t data)
 {
-	board->writel(board, OFFSET_CPU_CSR + WRC_CPU_CSR_REG_UADDR, addr >> 2);
-	board->writel(board, OFFSET_CPU_CSR + WRC_CPU_CSR_REG_UDATA, data);
+	board->writel(board, OFFSET_CPU_CSR + WRC_CPU_CSR_UADDR, addr >> 2);
+	board->writel(board, OFFSET_CPU_CSR + WRC_CPU_CSR_UDATA, data);
 }
 
 static uint32_t wrpc_v5_readl(struct board *board, unsigned int addr)
 {
-	board->writel(board, OFFSET_CPU_CSR + WRC_CPU_CSR_REG_UADDR, addr >> 2);
-	return board->readl(board, OFFSET_CPU_CSR + WRC_CPU_CSR_REG_UDATA);
+	board->writel(board, OFFSET_CPU_CSR + WRC_CPU_CSR_UADDR, addr >> 2);
+	return board->readl(board, OFFSET_CPU_CSR + WRC_CPU_CSR_UDATA);
 }
 
 
@@ -1548,6 +1549,7 @@ static void help_vuart(void)
 {
 	fprintf(stderr, "usage: %s vuart BOARD-OPTIONS [-k] [-c <cmd>] [-r] [-t <timeout>]\n", progname);
 	fprintf(stderr, " -k keep terminal\n");
+	fprintf(stderr, " -d debug\n");
 	fprintf(stderr, " -c <cmd> execute command\n");
 	fprintf(stderr, " -t <timeout> set a timeout to execute a command\n");
 	fprintf(stderr, " -r do not expect stdin (may be useful for scripts),"
@@ -1749,8 +1751,6 @@ static void wrpc_vuart_only_read(struct board *board,
 	int rx;
 	time_t start_time;
 
-	fprintf(stderr, "[press C-a to exit]\n");
-
 	if (timeout)
 		start_time = get_running_secs();
 
@@ -1764,6 +1764,29 @@ static void wrpc_vuart_only_read(struct board *board,
 
 		if (timeout && get_running_secs() >= start_time + timeout)
 			break;
+	}
+}
+
+static void wrpc_vuart_debug(struct board *board)
+{
+	int print = 1;
+
+	while(1) {
+		int rdr = vuart_readl(board, UART_REG_HOST_RDR );
+		unsigned char c = rdr & 0xff;
+		int rdy = rdr & UART_HOST_RDR_RDY;
+
+		if (rdy || print) {
+			printf("rdr: %08x (data:%02x '%c' rdy:%u count: %u)\n",
+			       rdr,
+			       c, c >= ' ' && c < 127 ? c : ' ',
+			       rdy ? 1 : 0,
+			       (rdr & UART_HOST_RDR_COUNT_MASK)
+			         >> UART_HOST_RDR_COUNT_SHIFT);
+			print = rdy;
+		}
+		else
+			usleep(1000);
 	}
 }
 
@@ -1829,12 +1852,13 @@ static int do_vuart(int argc, char *argv[])
 	char *cmd = NULL;
         unsigned timeout = 0;
 	int read_only = 0;
+	int debug = 0;
 
 	if (board_open(&argc, argv) < 0)
 		return 1;
 
 	/* Parse specific args */
-	while ((c = getopt (argc, argv, "c:kt:r")) != -1) {
+	while ((c = getopt (argc, argv, "c:kt:rd")) != -1) {
 		switch (c) {
 		case 'c':
 			/* Enable command mode */
@@ -1849,13 +1873,16 @@ static int do_vuart(int argc, char *argv[])
 		case 'r':
 			read_only = 1;
                         break;
+		case 'd':
+			debug = 1;
+			break;
 		case '?':
 			break;
 		}
 	}
 
-	if (cmd && read_only) {
-		perror("-r conficts with -c\n");
+	if ((cmd != NULL) + read_only + debug > 1) {
+		perror("Only one of -r, -c, -d can be used\n");
 		return 1;
 	}
 
@@ -1863,6 +1890,8 @@ static int do_vuart(int argc, char *argv[])
 		wrpc_vuart_only_read(board, timeout);
 	else if (cmd)
 		wrpc_vuart_command(board, cmd);
+	else if (debug)
+		wrpc_vuart_debug(board);
 	else
 		wrpc_vuart_term(board, keep_term, timeout);
 
@@ -2126,18 +2155,18 @@ void spll_readout_ertm14(struct board_ertm14* board, int undersample )
 }
 #endif
 
-void spll_readout_direct(struct board* board )
+static void spll_readout_direct(struct board* board )
 {
 
 	// purge the SPLL debug FIFO
 	int dummy;
 	for(;;)
 	{
-		uint32_t r = board->readl(board, OFFSET_SOFTPLL + offsetof( struct SPLL_WB, DFR_HOST_CSR ) );
-		if (r & SPLL_DFR_HOST_CSR_EMPTY)
+		uint32_t r = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
+		if (r & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY)
 			break;
 
-		dummy = board->readl(board, OFFSET_SOFTPLL + offsetof( struct SPLL_WB, DFR_HOST_R0 ) );
+		dummy = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_R0);
 		(void) dummy;
 	}
 
@@ -2152,20 +2181,20 @@ void spll_readout_direct(struct board* board )
 		while( cnt < buf_size - max_record_size )
 		{
 
-			uint32_t fifo_sr = board->readl(board, OFFSET_SOFTPLL + offsetof( struct SPLL_WB, DFR_HOST_CSR ) );
+			uint32_t fifo_sr = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
 
 
 
-			if( got_a_full_record && ( fifo_sr & SPLL_DFR_HOST_CSR_EMPTY ) )
+			if( got_a_full_record && ( fifo_sr & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY ) )
 				break;
 			else
 			{
 				do {
-					fifo_sr = board->readl(board, OFFSET_SOFTPLL + offsetof( struct SPLL_WB, DFR_HOST_CSR ) );
-				} while( fifo_sr & SPLL_DFR_HOST_CSR_EMPTY );
+					fifo_sr = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
+				} while( fifo_sr & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY );
 			}
 
-			uint32_t r = board->readl(board, OFFSET_SOFTPLL + offsetof( struct SPLL_WB, DFR_HOST_R0 ) );
+			uint32_t r = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_R0);
 			buf[cnt++] = r;
 			got_a_full_record = SPLL_DBG_IS_LAST_RECORD(r) ? 1 : 0;
 		}
@@ -2175,26 +2204,46 @@ void spll_readout_direct(struct board* board )
 	}
 }
 
+static void spll_debug_direct(struct board* board)
+{
+	unsigned csr_addr = OFFSET_SOFTPLL + SPLL_HOST_MAP_DFR_HOST_CSR;
+	unsigned data_addr = OFFSET_SOFTPLL + SPLL_HOST_MAP_DFR_HOST_R0;
+
+	while (1) {
+		uint32_t r = board->readl(board, csr_addr);
+		unsigned empty = (r & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY) != 0;
+		printf ("csr (@0x%04x): %08x empty:%u\n",
+			csr_addr, (unsigned)r, empty);
+		if (empty)
+			break;
+
+		r = board->readl(board, data_addr);
+		printf ("data (@0x%04x): %08x\n", data_addr, (unsigned)r);
+	}
+}
 
 static int do_spll_recorder(int argc, char *argv[])
 {
-	int is_ertm = 0;
+	int is_ertm;
 	int c;
 	int undersample __attribute__((unused)) = 20;
+	int debug = 0;
 
 
 	if (board_open(&argc, argv) < 0)
 		return 1;
 
 	/* Parse specific args */
-	while ((c = getopt (argc, argv, "u:h")) != -1) {
+	while ((c = getopt (argc, argv, "u:hd")) != -1) {
 		switch (c) {
 		case 'u':
-			/* Enable command mode */
 			undersample = atoi(optarg);
 			break;
 		case 'h':
 			help_spll_recorder();
+			break;
+		case 'd':
+			debug = 1;
 			break;
 		case '?':
 		default:
@@ -2212,10 +2261,10 @@ static int do_spll_recorder(int argc, char *argv[])
 		spll_readout_ertm14( (struct board_ertm14*) board, undersample );
 #endif
 	}
+	else if (debug)
+		spll_debug_direct(board);
 	else
-	{
-		spll_readout_direct( (struct board*) board );
-	}
+		spll_readout_direct(board);
 
 	board->fini(board);
 
@@ -2274,12 +2323,12 @@ static void dbg_writel(struct dbg_port *dbg,
  */
 static void dbg_set_cpu_reset(struct dbg_port *dbg, unsigned int rst)
 {
-	dbg_writel (dbg, WRC_CPU_CSR_REG_RESET, rst);
+	dbg_writel (dbg, WRC_CPU_CSR_RESET, rst);
 }
 
 static uint32_t dbg_get_cpu_reset(struct dbg_port *dbg)
 {
-	return dbg_readl (dbg, WRC_CPU_CSR_REG_RESET);
+	return dbg_readl (dbg, WRC_CPU_CSR_RESET);
 }
 
 /**
@@ -2292,7 +2341,7 @@ static uint32_t dbg_read_mbx(struct dbg_port *dbg)
 {
 	uint32_t reg;
 
-	reg = WRC_CPU_CSR_REG_DBG_CORE0_MBX;
+	reg = WRC_CPU_CSR_DBG_CORE0_MBX;
 	reg += sizeof(uint32_t) * dbg->cpu;
 
 	return dbg_readl(dbg, reg);
@@ -2307,7 +2356,7 @@ static void dbg_write_mbx(struct dbg_port *dbg, uint32_t val)
 {
 	uint32_t reg;
 
-	reg = WRC_CPU_CSR_REG_DBG_CORE0_MBX;
+	reg = WRC_CPU_CSR_DBG_CORE0_MBX;
 	reg += sizeof(uint32_t) * dbg->cpu;
 
 	dbg_writel(dbg, reg, val);
@@ -2322,7 +2371,7 @@ static void dbg_exec_insn(struct dbg_port *dbg, uint32_t insn)
 {
 	uint32_t reg;
 
-	reg = WRC_CPU_CSR_REG_DBG_CORE0_INSN;
+	reg = WRC_CPU_CSR_DBG_CORE0_INSN;
 	reg += sizeof(uint32_t) * dbg->cpu;
 
 	dbg_writel(dbg, reg, insn);
@@ -2367,7 +2416,7 @@ static bool dbg_in_debug_mode(struct dbg_port *dbg)
 {
 	uint32_t status;
 
-	status = dbg_readl(dbg, WRC_CPU_CSR_REG_DBG_STATUS);
+	status = dbg_readl(dbg, WRC_CPU_CSR_DBG_STATUS);
 
 	return ((status >> dbg->cpu) & 1);
 }
@@ -2384,7 +2433,7 @@ static int dbg_debug_mode_force_set(struct dbg_port *dbg)
 
 	if (dbg_in_debug_mode(dbg))
 		return 0;
-	dbg_writel(dbg, WRC_CPU_CSR_REG_DBG_FORCE, (1 << dbg->cpu));
+	dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
 	/* wait to debug to be ready max ~5s */
 	retry = 5000;
 	while (retry >= 0) {
@@ -2407,7 +2456,7 @@ static int dbg_debug_mode_force_set(struct dbg_port *dbg)
 			fprintf(stderr, "Huhh, cpu not anymore in debug\n");
 	}
 
-	dbg_writel(dbg, WRC_CPU_CSR_REG_DBG_FORCE, 0);
+	dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, 0);
 
 	if (retry < 0) {
 		errno = ETIME;
@@ -2905,11 +2954,11 @@ static int gdb_handle_qRcmd(struct dbg_port *dbg,
 		/* Reset the cpu.  */
 		dbg_set_cpu_reset(dbg, 1);
 		/* Force debug mode, otherwire it is cleared by reset.  */
-		dbg_writel(dbg, WRC_CPU_CSR_REG_DBG_FORCE, (1 << dbg->cpu));
+		dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
 		/* Release reset.  */
 		dbg_set_cpu_reset(dbg, 0);
 		/* Release force debug.  */
-		dbg_writel(dbg, WRC_CPU_CSR_REG_DBG_FORCE, 0);
+		dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, 0);
 		if (!dbg_in_debug_mode(dbg))
 		  fprintf(stderr, "Huhh, cpu not in debug\n");
 		strcpy(buf, "board reset\n");
@@ -2917,8 +2966,8 @@ static int gdb_handle_qRcmd(struct dbg_port *dbg,
 	else if (strcmp(buf, "port") == 0) {
 		snprintf(buf, sizeof(buf),
 			 "rst: %04x\ndbg st: %04x\n",
-			 dbg_readl (dbg, WRC_CPU_CSR_REG_RESET),
-			 dbg_readl (dbg, WRC_CPU_CSR_REG_DBG_STATUS));
+			 dbg_readl (dbg, WRC_CPU_CSR_RESET),
+			 dbg_readl (dbg, WRC_CPU_CSR_DBG_STATUS));
 	}
 	else {
 		strcpy(buf,"unhandled mon command, try 'mon help'\n");

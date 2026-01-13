@@ -1,0 +1,124 @@
+#ifndef __CHEBY__WRC_DEVICES_MAP__H__
+#define __CHEBY__WRC_DEVICES_MAP__H__
+
+#define WRC_DEVICES_MAP_SIZE 65536 /* 0x10000 = 64KB */
+
+/* REG minic */
+#define WRC_DEVICES_MAP_MINIC 0x0UL
+#define ADDR_MASK_WRC_DEVICES_MAP_MINIC 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_MINIC 0xff00UL
+#define WRC_DEVICES_MAP_MINIC_SIZE 256 /* 0x100 */
+
+/* REG endpoint */
+#define WRC_DEVICES_MAP_ENDPOINT 0x100UL
+#define ADDR_MASK_WRC_DEVICES_MAP_ENDPOINT 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_ENDPOINT 0xff00UL
+#define WRC_DEVICES_MAP_ENDPOINT_SIZE 256 /* 0x100 */
+
+/* REG softpll */
+#define WRC_DEVICES_MAP_SOFTPLL 0x200UL
+#define ADDR_MASK_WRC_DEVICES_MAP_SOFTPLL 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_SOFTPLL 0xff00UL
+#define WRC_DEVICES_MAP_SOFTPLL_SIZE 256 /* 0x100 */
+
+/* REG ppsgen */
+#define WRC_DEVICES_MAP_PPSGEN 0x300UL
+#define ADDR_MASK_WRC_DEVICES_MAP_PPSGEN 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_PPSGEN 0xff00UL
+#define WRC_DEVICES_MAP_PPSGEN_SIZE 256 /* 0x100 */
+
+/* REG syscon */
+#define WRC_DEVICES_MAP_SYSCON 0x400UL
+#define ADDR_MASK_WRC_DEVICES_MAP_SYSCON 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_SYSCON 0xff00UL
+#define WRC_DEVICES_MAP_SYSCON_SIZE 256 /* 0x100 */
+
+/* REG uart */
+#define WRC_DEVICES_MAP_UART 0x500UL
+#define ADDR_MASK_WRC_DEVICES_MAP_UART 0xff80UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_UART 0xff80UL
+#define WRC_DEVICES_MAP_UART_SIZE 128 /* 0x80 */
+
+/* REG vuart */
+#define WRC_DEVICES_MAP_VUART 0x580UL
+#define ADDR_MASK_WRC_DEVICES_MAP_VUART 0xff80UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_VUART 0xff80UL
+#define WRC_DEVICES_MAP_VUART_SIZE 128 /* 0x80 */
+
+/* REG onewire */
+#define WRC_DEVICES_MAP_ONEWIRE 0x600UL
+#define ADDR_MASK_WRC_DEVICES_MAP_ONEWIRE 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_ONEWIRE 0xff00UL
+#define WRC_DEVICES_MAP_ONEWIRE_SIZE 256 /* 0x100 */
+
+/* REG timing */
+#define WRC_DEVICES_MAP_TIMING 0x700UL
+#define ADDR_MASK_WRC_DEVICES_MAP_TIMING 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_TIMING 0xff00UL
+#define WRC_DEVICES_MAP_TIMING_SIZE 256 /* 0x100 */
+
+/* REG wdiag */
+#define WRC_DEVICES_MAP_WDIAG 0x800UL
+#define ADDR_MASK_WRC_DEVICES_MAP_WDIAG 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_WDIAG 0xff00UL
+#define WRC_DEVICES_MAP_WDIAG_SIZE 256 /* 0x100 */
+
+/* REG freqmon */
+#define WRC_DEVICES_MAP_FREQMON 0xa00UL
+#define ADDR_MASK_WRC_DEVICES_MAP_FREQMON 0xff00UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_FREQMON 0xff00UL
+#define WRC_DEVICES_MAP_FREQMON_SIZE 256 /* 0x100 */
+
+/* REG aux */
+#define WRC_DEVICES_MAP_AUX 0x8000UL
+#define ADDR_MASK_WRC_DEVICES_MAP_AUX 0x8000UL
+#define ADDR_FMASK_WRC_DEVICES_MAP_AUX 0x8000UL
+#define WRC_DEVICES_MAP_AUX_SIZE 32768 /* 0x8000 = 32KB */
+
+#ifndef __ASSEMBLER__
+struct wrc_devices_map {
+  /* [0x0]: SUBMAP */
+  uint32_t minic[64];
+
+  /* [0x100]: SUBMAP */
+  uint32_t endpoint[64];
+
+  /* [0x200]: SUBMAP */
+  uint32_t softpll[64];
+
+  /* [0x300]: SUBMAP */
+  uint32_t ppsgen[64];
+
+  /* [0x400]: SUBMAP */
+  uint32_t syscon[64];
+
+  /* [0x500]: SUBMAP */
+  uint32_t uart[32];
+
+  /* [0x580]: SUBMAP */
+  uint32_t vuart[32];
+
+  /* [0x600]: SUBMAP */
+  uint32_t onewire[64];
+
+  /* [0x700]: SUBMAP */
+  uint32_t timing[64];
+
+  /* [0x800]: SUBMAP */
+  uint32_t wdiag[64];
+
+  /* padding to: 2560 Bytes */
+  uint32_t __padding_0[64];
+
+  /* [0xa00]: SUBMAP */
+  uint32_t freqmon[64];
+
+  /* padding to: 32768 Bytes */
+  uint32_t __padding_1[7488];
+
+  /* [0x8000]: SUBMAP */
+  uint32_t aux[8192];
+};
+#endif /* !__ASSEMBLER__*/
+
+#endif /* __CHEBY__WRC_DEVICES_MAP__H__ */

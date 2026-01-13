@@ -1,6 +1,7 @@
 obj-y += \
 	dev/simple_uart.o \
 	dev/console.o \
+	dev/console-vuart.o \
 	dev/console-uart.o
 
 obj-$(CONFIG_EMBEDDED_NODE) += \

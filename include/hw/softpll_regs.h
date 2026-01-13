@@ -60,7 +60,7 @@
 
 /* definitions for register: External Clock Control Register */
 
-/* definitions for field: Enable External Clock PLL in reg: External Clock Control Register */
+/* definitions for field: External Clock channel tagging enable in reg: External Clock Control Register */
 #define SPLL_ECCR_EXT_EN                      WBGEN2_GEN_MASK(0, 1)
 
 /* definitions for field: External Clock Input Available in reg: External Clock Control Register */
@@ -211,36 +211,6 @@
 /* definitions for field: Got a tag in reg: Interrupt status register */
 #define SPLL_EIC_ISR_TAG                      WBGEN2_GEN_MASK(0, 1)
 
-/* definitions for register: FIFO 'Debug FIFO Register - Host side' data output register 0 */
-
-/* definitions for field: Value in reg: FIFO 'Debug FIFO Register - Host side' data output register 0 */
-#define SPLL_DFR_HOST_R0_VALUE_MASK           WBGEN2_GEN_MASK(0, 32)
-#define SPLL_DFR_HOST_R0_VALUE_SHIFT          0
-#define SPLL_DFR_HOST_R0_VALUE_W(value)       WBGEN2_GEN_WRITE(value, 0, 32)
-#define SPLL_DFR_HOST_R0_VALUE_R(reg)         WBGEN2_GEN_READ(reg, 0, 32)
-
-/* definitions for register: FIFO 'Debug FIFO Register - Host side' data output register 1 */
-
-/* definitions for field: Seq ID in reg: FIFO 'Debug FIFO Register - Host side' data output register 1 */
-#define SPLL_DFR_HOST_R1_SEQ_ID_MASK          WBGEN2_GEN_MASK(0, 16)
-#define SPLL_DFR_HOST_R1_SEQ_ID_SHIFT         0
-#define SPLL_DFR_HOST_R1_SEQ_ID_W(value)      WBGEN2_GEN_WRITE(value, 0, 16)
-#define SPLL_DFR_HOST_R1_SEQ_ID_R(reg)        WBGEN2_GEN_READ(reg, 0, 16)
-
-/* definitions for register: FIFO 'Debug FIFO Register - Host side' control/status register */
-
-/* definitions for field: FIFO full flag in reg: FIFO 'Debug FIFO Register - Host side' control/status register */
-#define SPLL_DFR_HOST_CSR_FULL                WBGEN2_GEN_MASK(16, 1)
-
-/* definitions for field: FIFO empty flag in reg: FIFO 'Debug FIFO Register - Host side' control/status register */
-#define SPLL_DFR_HOST_CSR_EMPTY               WBGEN2_GEN_MASK(17, 1)
-
-/* definitions for field: FIFO counter in reg: FIFO 'Debug FIFO Register - Host side' control/status register */
-#define SPLL_DFR_HOST_CSR_USEDW_MASK          WBGEN2_GEN_MASK(0, 13)
-#define SPLL_DFR_HOST_CSR_USEDW_SHIFT         0
-#define SPLL_DFR_HOST_CSR_USEDW_W(value)      WBGEN2_GEN_WRITE(value, 0, 13)
-#define SPLL_DFR_HOST_CSR_USEDW_R(reg)        WBGEN2_GEN_READ(reg, 0, 13)
-
 /* definitions for register: FIFO 'Tag Readout Register' data output register 0 */
 
 /* definitions for field: Tag value in reg: FIFO 'Tag Readout Register' data output register 0 */
@@ -264,58 +234,52 @@
 #define SPLL_TRR_CSR_EMPTY                    WBGEN2_GEN_MASK(17, 1)
 
 PACKED struct SPLL_WB {
-/* [0x0]: REG SPLL Control/Status Register */
-uint32_t CSR;
-/* [0x4]: REG External Clock Control Register */
-uint32_t ECCR;
-/* [0x8]: REG Aligner Control Register */
-uint32_t AL_CR;
-/* [0xc]: REG Aligner Counter REF register */
-uint32_t AL_CREF;
-/* [0x10]: REG Aligner Counter IN register */
-uint32_t AL_CIN;
-/* [0x14]: REG DMTD stat control */
-uint32_t DMTD_STAT_CR;
-/* [0x18]: REG DMTD stat values */
-uint32_t DMTD_STAT_VAL;
-/* [0x1c]: REG EXT VCO Frequency */
-uint32_t F_EXT;
-/* [0x20]: REG Output Channel Control Register */
-uint32_t OCCR;
-/* [0x24]: REG Reference Channel Tagging Enable Register */
-uint32_t RCER;
-/* [0x28]: REG Output Channel Tagging Enable Register */
-uint32_t OCER;
-/* padding to: 16 words */
-uint32_t __padding_0[5];
-/* [0x40]: REG Helper DAC Output */
-uint32_t DAC_HPLL;
-/* [0x44]: REG Main DAC Output */
-uint32_t DAC_MAIN;
-/* [0x48]: REG DDMTD Deglitcher threshold */
-uint32_t DEGLITCH_THR;
-/* [0x4c]: REG Debug FIFO Register - SPLL side */
-uint32_t DFR_SPLL;
-/* padding to: 24 words */
-uint32_t __padding_1[4];
-/* [0x60]: REG Interrupt disable register */
-uint32_t EIC_IDR;
-/* [0x64]: REG Interrupt enable register */
-uint32_t EIC_IER;
-/* [0x68]: REG Interrupt mask register */
-uint32_t EIC_IMR;
-/* [0x6c]: REG Interrupt status register */
-uint32_t EIC_ISR;
-/* [0x70]: REG FIFO 'Debug FIFO Register - Host side' data output register 0 */
-uint32_t DFR_HOST_R0;
-/* [0x74]: REG FIFO 'Debug FIFO Register - Host side' data output register 1 */
-uint32_t DFR_HOST_R1;
-/* [0x78]: REG FIFO 'Debug FIFO Register - Host side' control/status register */
-uint32_t DFR_HOST_CSR;
-/* [0x7c]: REG FIFO 'Tag Readout Register' data output register 0 */
-uint32_t TRR_R0;
-/* [0x80]: REG FIFO 'Tag Readout Register' control/status register */
-uint32_t TRR_CSR;
+  /* [0x0]: REG SPLL Control/Status Register */
+  uint32_t CSR;
+  /* [0x4]: REG External Clock Control Register */
+  uint32_t ECCR;
+  /* [0x8]: REG Aligner Control Register */
+  uint32_t AL_CR;
+  /* [0xc]: REG Aligner Counter REF register */
+  uint32_t AL_CREF;
+  /* [0x10]: REG Aligner Counter IN register */
+  uint32_t AL_CIN;
+  /* [0x14]: REG DMTD stat control */
+  uint32_t DMTD_STAT_CR;
+  /* [0x18]: REG DMTD stat values */
+  uint32_t DMTD_STAT_VAL;
+  /* [0x1c]: REG EXT VCO Frequency */
+  uint32_t F_EXT;
+  /* [0x20]: REG Output Channel Control Register */
+  uint32_t OCCR;
+  /* [0x24]: REG Reference Channel Tagging Enable Register */
+  uint32_t RCER;
+  /* [0x28]: REG Output Channel Tagging Enable Register */
+  uint32_t OCER;
+  /* padding to: 16 words */
+  uint32_t __padding_0[5];
+  /* [0x40]: REG Helper DAC Output */
+  uint32_t DAC_HPLL;
+  /* [0x44]: REG Main DAC Output */
+  uint32_t DAC_MAIN;
+  /* [0x48]: REG DDMTD Deglitcher threshold */
+  uint32_t DEGLITCH_THR;
+  /* [0x4c]: REG Debug FIFO Register - SPLL side */
+  uint32_t DFR_SPLL;
+  /* padding to: 24 words */
+  uint32_t __padding_1[4];
+  /* [0x60]: REG Interrupt disable register */
+  uint32_t EIC_IDR;
+  /* [0x64]: REG Interrupt enable register */
+  uint32_t EIC_IER;
+  /* [0x68]: REG Interrupt mask register */
+  uint32_t EIC_IMR;
+  /* [0x6c]: REG Interrupt status register */
+  uint32_t EIC_ISR;
+  /* [0x70]: REG FIFO 'Tag Readout Register' data output register 0 */
+  uint32_t TRR_R0;
+  /* [0x74]: REG FIFO 'Tag Readout Register' control/status register */
+  uint32_t TRR_CSR;
 };
 
 #endif

@@ -1209,12 +1209,12 @@ int ertm14_spll_debug_dump_task_poll(void)
 {
     struct uart_packet tx_pkt;
     struct ertm14_spll_debug_dump_data *tx_payload = (struct ertm14_spll_debug_dump_data *) &tx_pkt.payload;
-    int count = 64; //sizeof( *tx_payload ) / sizeof( uint32_t ) - 2;
+    int max_count = 64; //sizeof( *tx_payload ) / sizeof( uint32_t ) - 2;
 
     if( !spll_dbg_enabled )
         return 0;
 
-    int r = spll_get_debug_queue_samples( tx_payload->payload, &count );
+    int count = spll_get_debug_queue_samples( tx_payload->payload, max_count );
 
     if( count <= 0 )
         return 0;
@@ -1224,8 +1224,11 @@ int ertm14_spll_debug_dump_task_poll(void)
     tx_pkt.ptype = ERTM14_UART_PTYPE_SOFTPLL_LOG;
     tx_pkt.length = sizeof( uint32_t ) * count + 4;
 
+#if 0
+    /* FIXME: was not working.  Is it useful ? */
     if( r == -ENOSPC )
         tx_payload->flags |= ERTM14_SPLL_DEBUG_DUMP_OVERFLOW;
+#endif
 
     tx_payload->flags = host_to_be32( tx_payload->flags );
     for( int i = 0; i < count; i ++ )
