@@ -785,7 +785,7 @@ config HOST_PROCESS
 	boolean "Build as a host process, to develop/debug network"
 
 config CUSTOM_RAMSIZE
-	depends on DEVELOPER && EMBEDDED_NODE
+	depends on DEVELOPER && !HOST_PROCESS
 	int "Size of the RAM in the FPGA for this program"
 	default 65536 if TARGET_WR_SWITCH
 	default 196608 if TARGET_ERTM14
