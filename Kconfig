@@ -785,7 +785,7 @@ config HOST_PROCESS
 	boolean "Build as a host process, to develop/debug network"
 
 config CUSTOM_RAMSIZE
-	depends on DEVELOPER && (ARCH_LM32 || ARCH_RISCV)
+	depends on DEVELOPER && !HOST_PROCESS
 	int "Size of the RAM in the FPGA for this program"
 	default 65536 if TARGET_WR_SWITCH
 	default 196608 if TARGET_ERTM14
@@ -819,7 +819,7 @@ config TEMP_HIGH_RAPPEL
 	int "Remember over-temperature every that many seconds"
 
 config CMD_LL
-	depends on DEVELOPER && (ARCH_LM32 || ARCH_RISCV)
+	depends on DEVELOPER && EMBEDDED_NODE
 	bool "Build low-level commands for development/testing"
 	help
 	  This enables low-level commands: "devmem" to read/write memory
@@ -843,13 +843,13 @@ config DAC_LOG
 	  to set ipaddress and mac of the target host. UDP port is 1050.
 
 config FLASH_INIT
-	depends on DEVELOPER && (ARCH_LM32 || ARCH_RISCV)
+	depends on DEVELOPER && EMBEDDED_NODE
 	default y
 	boolean "Read init commands from flash storage"
 
 # CHECK_RESET for switch and node
 config CHECK_RESET
-	depends on DEVELOPER && (ARCH_LM32 || ARCH_RISCV) || TARGET_WR_SWITCH
+	depends on (DEVELOPER && EMBEDDED_NODE) || TARGET_WR_SWITCH
 	bool "Print a stack trace if reset happens"
 	help
 	  If the CPU is following a NULL pointer, the program will

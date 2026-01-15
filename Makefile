@@ -20,14 +20,6 @@ USE-COMP-INSTR-$(CONFIG_RISCV_COMP_INSTR) = c
 CROSS_COMPILE ?= $(CROSS_COMPILE-y)
 CROSS_COMPILE_TARGET_HOST ?= $(CROSS_COMPILE_TARGET_HOST-y)
 
-ifeq ($(CONFIG_ARCH_LM32),y)
-CPU_ARCH = LM32
-endif
-ifeq ($(CONFIG_ARCH_RISCV),y)
-CPU_ARCH = RISCV
-endif
-
-
 ifdef CONFIG_HOST_PROCESS
   CROSS_COMPILE =
 endif
@@ -110,14 +102,18 @@ endif
 obj-$(CONFIG_EMBEDDED_NODE) += \
 	monitor/monitor_ppsi.o
 
-cflags-$(CONFIG_ARCH_LM32) += -mmultiply-enabled -mbarrel-shift-enabled
-cflags-$(CONFIG_ARCH_RISCV) += -march=rv32im$(USE-COMP-INSTR-y) -mabi=ilp32
-ldflags-$(CONFIG_ARCH_LM32) = -mmultiply-enabled -mbarrel-shift-enabled \
-	-nostdlib -T $(LDS-y)
-ldflags-$(CONFIG_ARCH_RISCV) = -march=rv32im$(USE-COMP-INSTR-y) -mabi=ilp32 \
-	-nostdlib -T $(LDS-y)
+archflags-$(CONFIG_ARCH_LM32) = -mmultiply-enabled -mbarrel-shift-enabled
+archflags-$(CONFIG_ARCH_RISCV) = -march=rv32im$(USE-COMP-INSTR-y) -mabi=ilp32
 
-asflags-$(CONFIG_ARCH_RISCV) += -march=rv32im$(USE-COMP-INSTR-y)_zicsr -mabi=ilp32
+# Note: RISC-V is special as it needs extra -march flags for the assembler in
+#  order to allow system instructions
+asflags-y = $(archflags-y)
+asflags-$(CONFIG_ARCH_RISCV) += -march=rv32im$(USE-COMP-INSTR-y)_zicsr
+
+cflags-y += $(archflags-y)
+ldflags-$(CONFIG_ARCH_LM32) = $(archflags-y) -nostdlib -T $(LDS-y)
+ldflags-$(CONFIG_ARCH_RISCV) = $(archflags-y) -nostdlib -T $(LDS-y)
+
 arch-files-$(CONFIG_ARCH_LM32) = $(OUTPUT).bram $(OUTPUT).vhd $(OUTPUT).mif $(OUTPUT).mem
 arch-files-$(CONFIG_ARCH_RISCV) = $(OUTPUT).bram $(OUTPUT).vhd $(OUTPUT).mif $(OUTPUT).mem
 
