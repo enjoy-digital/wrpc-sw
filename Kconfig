@@ -797,15 +797,6 @@ config CUSTOM_RAMSIZE
 	  more features you may want to adjust the FPGA size and
 	  choose your preferred value here.
 
-config CUSTOM_STACKSIZE
-	depends on DEVELOPER && (ARCH_LM32 || ARCH_RISCV)
-	int "Size of the stack area needed by this program"
-	default 2048
-	help
-	  The linker complains if the code doesn't fit into RAM, but
-	  we must also consider the stack, or the program will crash
-	  at run time. (However, we have a detector for overflows).
-
 config CUSTOM_PRINT_BUFSIZE
 	depends on DEVELOPER
 	int "Size for the temporary output string of pp_printf"
