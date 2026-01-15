@@ -140,10 +140,6 @@ config IGNORE_HPLL
 
 # most options with no prompt here are prompted-for in the "advanced" section
 
-config STACKSIZE
-	int
-	default 2048
-
 config PRINT_BUFSIZE
 	int
 	default CUSTOM_PRINT_BUFSIZE if DEVELOPER
