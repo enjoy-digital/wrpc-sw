@@ -2079,13 +2079,15 @@ static int do_board(int argc, char *argv[])
         return 0;
 }
 
-static void help_spll_recorder()
+static void help_spll_recorder(void)
 {
 	fprintf(stderr, "SoftPLL debug/recorder tool. \n");
 	fprintf(stderr, "This dumps the real-time SPLL traces (error values/DAC drive/events) into stdout for the purpose of further analysis/plotting. \n");
 
 	fprintf(stderr, "Usage: %s spll-recorder [options]\n", progname);
-	fprintf(stderr, "        -u <undersampling factor>\n");
+	fprintf(stderr, "  -u USAMP  undersampling factor (only for ertm14)\n");
+	fprintf(stderr, "  -d        debug output\n");
+	fprintf(stderr, "  -b        binary output\n");
 }
 
 static const char *dbg_source_to_string(int src)
@@ -2249,52 +2251,83 @@ void spll_readout_ertm14(struct board_ertm14* board, int undersample )
 }
 #endif
 
-static void spll_readout_direct(struct board* board )
+/* Read spll FIFO status and return != 0 if the fifo is empty */
+static unsigned spll_fifo_empty(struct board *board)
 {
+	uint32_t r = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
+	if (0)
+		fprintf(stderr, "spll csr: %08x\n", r);
+	return r & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY;
+}
 
+static uint32_t spll_read_word(struct board *board)
+{
+	uint32_t r;
+
+	r = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_R0);
+
+	if (0)
+		fprintf(stderr, "spll r0:  %08x\n", r);
+	return r;
+}
+
+static void spll_purge(struct board* board)
+{
 	// purge the SPLL debug FIFO
-	int dummy;
-	for(;;)
-	{
-		uint32_t r = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
-		if (r & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY)
-			break;
-
-		dummy = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_R0);
-		(void) dummy;
+	while (!spll_fifo_empty(board)) {
+		spll_read_word(board);
 	}
+}
 
+static unsigned spll_read_direct(struct board* board, uint32_t *buf, unsigned len)
+{
+	size_t cnt = 0;
+	const size_t max_record_size = 256;
+	int got_a_full_record = 0;
 
-	for (;;)
-	{
-		uint32_t buf[16384];
-		size_t buf_size = 16384, cnt = 0;
-		const size_t max_record_size = 256;
-		int got_a_full_record = 1;
-
-		while( cnt < buf_size - max_record_size )
-		{
-
-			uint32_t fifo_sr = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
-
-
-
-			if( got_a_full_record && ( fifo_sr & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY ) )
+	while (cnt < len) {
+		if (spll_fifo_empty(board)) {
+			if (got_a_full_record)
 				break;
-			else
-			{
-				do {
-					fifo_sr = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_CSR);
-				} while( fifo_sr & SPLL_HOST_MAP_DFR_HOST_CSR_EMPTY );
-			}
-
-			uint32_t r = board->readl(board, WRC_HOST_MAP_SPLL + SPLL_HOST_MAP_DFR_HOST_R0);
-			buf[cnt++] = r;
-			got_a_full_record = SPLL_DBG_IS_LAST_RECORD(r) ? 1 : 0;
+			usleep(100);
+			continue;
 		}
 
-		if( cnt > 0 )
-			spll_dump_debug_data(buf, cnt);
+		uint32_t r = spll_read_word(board);
+		buf[cnt++] = r;
+		got_a_full_record = SPLL_DBG_IS_LAST_RECORD(r);
+		if (got_a_full_record && cnt >= len - max_record_size)
+			break;
+	}
+
+	return cnt;
+}
+
+static void spll_readout_direct(struct board* board)
+{
+	uint32_t buf[16384];
+
+	spll_purge(board);
+
+	for (;;) {
+		unsigned cnt;
+
+		cnt = spll_read_direct(board, buf, sizeof(buf)/sizeof(*buf));
+		spll_dump_debug_data(buf, cnt);
+	}
+}
+
+static void spll_readout_binary(struct board* board)
+{
+	uint32_t buf[16384];
+
+	spll_purge(board);
+
+	for (;;) {
+		unsigned cnt;
+
+		cnt = spll_read_direct(board, buf, sizeof(buf)/sizeof(*buf));
+		fwrite(buf, 4, cnt, stdout);
 	}
 }
 
@@ -2322,13 +2355,13 @@ static int do_spll_recorder(int argc, char *argv[])
 	int c;
 	int undersample __attribute__((unused)) = 20;
 	int debug = 0;
-
+	int binary = 0;
 
 	if (board_open(&argc, argv) < 0)
 		return 1;
 
 	/* Parse specific args */
-	while ((c = getopt (argc, argv, "u:hd")) != -1) {
+	while ((c = getopt (argc, argv, "u:hdb")) != -1) {
 		switch (c) {
 		case 'u':
 			undersample = atoi(optarg);
@@ -2338,6 +2371,9 @@ static int do_spll_recorder(int argc, char *argv[])
 			break;
 		case 'd':
 			debug = 1;
+			break;
+		case 'b':
+			binary = 1;
 			break;
 		case '?':
 		default:
@@ -2357,6 +2393,8 @@ static int do_spll_recorder(int argc, char *argv[])
 	}
 	else if (debug)
 		spll_debug_direct(board);
+	else if (binary)
+		spll_readout_binary(board);
 	else
 		spll_readout_direct(board);
 
@@ -2365,6 +2403,28 @@ static int do_spll_recorder(int argc, char *argv[])
 	return 0;
 }
 
+static void help_spll_display(void)
+{
+	fprintf(stderr, "SoftPLL log display.\n");
+	fprintf(stderr, "This reads binary dumps from spll-recorder -b\n");
+
+	fprintf(stderr, "Usage: %s spll-display\n", progname);
+}
+
+static int do_spll_display(int argc, char *argv[])
+{
+	uint32_t buf[16384];
+	size_t cnt;
+
+	while (1) {
+		cnt = fread(buf, 4, sizeof(buf)/4, stdin);
+		if (cnt <= 0)
+			break;
+		spll_dump_debug_data(buf, cnt);
+	}
+
+	return 0;
+}
 
 #define GDB_PACKET_SIZE_MAX 2048
 
@@ -4027,6 +4087,13 @@ static const struct tool_base tool_spll_recorder = {
         help_spll_recorder
 };
 
+static const struct tool_base tool_spll_display = {
+        "spll-display",
+        "Display spll-recorder binary output",
+        do_spll_display,
+        help_spll_display
+};
+
 static const struct tool_base tool_gdbserver = {
         "gdbserver",
         "risc-v gdb-sever",
@@ -4063,6 +4130,7 @@ static const struct tool_base *tools[] = {
 	&tool_mac,
 #endif /* !defined(SUPPORT_WRS) */
 	&tool_spll_recorder,
+	&tool_spll_display,
 	&tool_gdbserver,
 #ifndef SUPPORT_WRS
 	&tool_wdiags,
