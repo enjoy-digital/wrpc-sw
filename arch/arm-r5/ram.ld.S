@@ -1,3 +1,10 @@
+/*
+ * This work is part of the White Rabbit project
+ *
+ * Copyright (C) 2026 CERN (www.cern.ch)
+ *
+ * Released according to the GNU GPL, version 2 or any later version.
+ */
 ENTRY(_reset_vector)
 
 MEMORY
