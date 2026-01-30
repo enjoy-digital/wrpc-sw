@@ -17,7 +17,7 @@
 
 /* Added peripherals */
 #define BASE_FMC_ENABLE   (DEV_BASE + 0x8000) // on all boards
-#define BASE_SI570        (DEV_BASE + 0x8100) // on X102, X706
+#define BASE_SI570        (DEV_BASE + 0x8120) // on X102, X706
 
 /* Board-specific parameters */
 #define TICS_PER_SECOND 1000
