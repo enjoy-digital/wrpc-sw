@@ -43,7 +43,7 @@ various information about Ethernet frame's structure and type:
     it will be assigned from WRPC configuration)
   \item[] \emph{vCRC} - the frame contains a valid CRC checksum
   \item[] \emph{packet class} - the packet class assigned by the classifier
-    inside WRPC MAC module.
+    inside WRPC.
 \end{itemize}
 
 The packet class assigned by the classifier is one-hot encoded with 8 possible
@@ -53,7 +53,7 @@ processed inside the core (those are never exposed to the user through the
 fabric interface); {\bf class 7} (\textit{0x80} to all Etherbone frames that are
 either broadcast or unicast with matching destination MAC address; {\bf class 6}
 (\textit{0x40}) to all other traffic not qualified to any of the previous
-classes.\\
+classes. The packet class is ignored for transmission and in absence of classifier, the packet class is \textit{0x00}.\\
 
 
 {\bf OOB data} is used for passing the timestamp-related information for the incoming and 
