@@ -2705,9 +2705,9 @@ static void dbg_urv_pc_advance_4(struct dbg_port *dbg)
 /**
  * Continue command
  */
-static int gdb_handle_c(struct dbg_port *dbg,
-                        struct gdb_packet *out,
-                        struct gdb_packet *in)
+static int gdb_urv_handle_c(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	if (in->size > 1) {
 		out->size = 0;
@@ -2784,9 +2784,9 @@ static int gdb_handle_c(struct dbg_port *dbg,
 /**
  * Detach
  */
-static int gdb_handle_D(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_D(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	dbg_urv_exec_insn(dbg, 0x00100073); /* ebreak */
 	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX, "OK");
@@ -2797,9 +2797,9 @@ static int gdb_handle_D(struct dbg_port *dbg,
 /**
  * Read all registers
  */
-static int gdb_handle_g(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_g(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	uint32_t regs[32], pc;
 	int i;
@@ -2823,9 +2823,9 @@ static int gdb_handle_g(struct dbg_port *dbg,
 /**
  * Write all register
  */
-static int gdb_handle_G(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_G(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	uint32_t regs[33]; /* 32 register, 1 PC */
 	int i;
@@ -2896,9 +2896,9 @@ static int gdb_handle_k(struct dbg_port *dbg,
 /**
  * Write data to memory
  */
-static int gdb_handle_M(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_M(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	uint32_t addr, n;
 	uint32_t a0, a1;
@@ -2972,9 +2972,9 @@ static int gdb_handle_M(struct dbg_port *dbg,
 /**
  * Read data from memory
  */
-static int gdb_handle_m(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_m(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	uint32_t addr, n;
 	uint32_t a0, a1;
@@ -3010,9 +3010,9 @@ static int gdb_handle_m(struct dbg_port *dbg,
 /**
  * Read a specific register
  */
-static int gdb_handle_p(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_p(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	unsigned int val;
 	int ret;
@@ -3071,9 +3071,9 @@ static int gdb_handle_qm(struct dbg_port *dbg,
 	return 0;
 }
 
-static int gdb_handle_qRcmd(struct dbg_port *dbg,
-			      struct gdb_packet *out,
-			      struct gdb_packet *in)
+static int gdb_urv_handle_qRcmd(struct dbg_port *dbg,
+				struct gdb_packet *out,
+				struct gdb_packet *in)
 {
 	char buf[GDB_PACKET_SIZE_MAX / 2];
 	unsigned len;
@@ -3140,16 +3140,16 @@ static int gdb_handle_qRcmd(struct dbg_port *dbg,
 	return 0;
 }
 
-static int gdb_handle_q(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_q(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	if (strncmp(in->data, "qSupported:", 11) == 0)
 		return gdb_handle_q_supported(dbg, out, in);
 	else if (strncmp(in->data, "qm", 2) == 0)
 		return gdb_handle_qm(dbg, out, in);
 	else if (strncmp(in->data, "qRcmd,", 6) == 0)
-		return gdb_handle_qRcmd(dbg, out, in);
+		return gdb_urv_handle_qRcmd(dbg, out, in);
 	out->size = 0;
 
 	return 0;
@@ -3158,9 +3158,9 @@ static int gdb_handle_q(struct dbg_port *dbg,
 /**
  * Single step
  */
-static int gdb_handle_s(struct dbg_port *dbg,
-			     struct gdb_packet *out,
-			     struct gdb_packet *in)
+static int gdb_urv_handle_s(struct dbg_port *dbg,
+			    struct gdb_packet *out,
+			    struct gdb_packet *in)
 {
 	uint32_t pc, npc, ra, insn;
 
@@ -3299,19 +3299,19 @@ static int gdb_handle_X(struct dbg_port *dbg,
 	return 0;
 }
 
-static gdb_command_t * const gdb_packet_exec[] = {
-	['c'] = gdb_handle_c,
-	['D'] = gdb_handle_D,
-	['g'] = gdb_handle_g,
-	['G'] = gdb_handle_G,
+static gdb_command_t * const gdb_urv_packet_exec[] = {
+	['c'] = gdb_urv_handle_c,
+	['D'] = gdb_urv_handle_D,
+	['g'] = gdb_urv_handle_g,
+	['G'] = gdb_urv_handle_G,
 	['H'] = gdb_handle_H,
 	['k'] = gdb_handle_k,
-	['M'] = gdb_handle_M,
-	['m'] = gdb_handle_m,
-	['p'] = gdb_handle_p,
+	['M'] = gdb_urv_handle_M,
+	['m'] = gdb_urv_handle_m,
+	['p'] = gdb_urv_handle_p,
 	['P'] = gdb_handle_P,
-	['q'] = gdb_handle_q,
-	['s'] = gdb_handle_s,
+	['q'] = gdb_urv_handle_q,
+	['s'] = gdb_urv_handle_s,
 	['v'] = gdb_handle_v,
 	['v'] = gdb_handle_v,
 	['X'] = gdb_handle_X,
@@ -3338,7 +3338,7 @@ static int gdb_command(struct dbg_port *dbg,
 	if (in->size == 0)
 		return -1;
 
-	exec = gdb_packet_exec[cmd];
+	exec = gdb_urv_packet_exec[cmd];
 	if (exec)
 		return exec(dbg, out, in);
 	out->size = 0;
