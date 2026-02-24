@@ -2464,7 +2464,7 @@ typedef int (gdb_command_t)(struct dbg_port *dbg,
 /**
  * Read value from the Debug Port
  */
-static uint32_t dbg_readl(struct dbg_port *dbg, uint32_t reg)
+static uint32_t dbg_urv_readl(struct dbg_port *dbg, uint32_t reg)
 {
         return board->readl(board, reg | OFFSET_CPU_CSR);
 }
@@ -2472,7 +2472,7 @@ static uint32_t dbg_readl(struct dbg_port *dbg, uint32_t reg)
 /**
  * Write value to the Debug Port
  */
-static void dbg_writel(struct dbg_port *dbg,
+static void dbg_urv_writel(struct dbg_port *dbg,
                        uint32_t reg, uint32_t val)
 {
         board->writel(board, reg | OFFSET_CPU_CSR, val);
@@ -2481,14 +2481,14 @@ static void dbg_writel(struct dbg_port *dbg,
 /**
  * Control CPU reset
  */
-static void dbg_set_cpu_reset(struct dbg_port *dbg, unsigned int rst)
+static void dbg_urv_set_cpu_reset(struct dbg_port *dbg, unsigned int rst)
 {
-	dbg_writel (dbg, WRC_CPU_CSR_RESET, rst);
+	dbg_urv_writel (dbg, WRC_CPU_CSR_RESET, rst);
 }
 
-static uint32_t dbg_get_cpu_reset(struct dbg_port *dbg)
+static uint32_t dbg_urv_get_cpu_reset(struct dbg_port *dbg)
 {
-	return dbg_readl (dbg, WRC_CPU_CSR_RESET);
+	return dbg_urv_readl (dbg, WRC_CPU_CSR_RESET);
 }
 
 /**
@@ -2497,14 +2497,14 @@ static uint32_t dbg_get_cpu_reset(struct dbg_port *dbg)
  *
  * Return value read
  */
-static uint32_t dbg_read_mbx(struct dbg_port *dbg)
+static uint32_t dbg_urv_read_mbx(struct dbg_port *dbg)
 {
 	uint32_t reg;
 
 	reg = WRC_CPU_CSR_DBG_CORE0_MBX;
 	reg += sizeof(uint32_t) * dbg->cpu;
 
-	return dbg_readl(dbg, reg);
+	return dbg_urv_readl(dbg, reg);
 }
 
 /**
@@ -2512,14 +2512,14 @@ static uint32_t dbg_read_mbx(struct dbg_port *dbg)
  * @dbg: debug port
  * @val: value to write
  */
-static void dbg_write_mbx(struct dbg_port *dbg, uint32_t val)
+static void dbg_urv_write_mbx(struct dbg_port *dbg, uint32_t val)
 {
 	uint32_t reg;
 
 	reg = WRC_CPU_CSR_DBG_CORE0_MBX;
 	reg += sizeof(uint32_t) * dbg->cpu;
 
-	dbg_writel(dbg, reg, val);
+	dbg_urv_writel(dbg, reg, val);
 }
 
 /**
@@ -2527,14 +2527,14 @@ static void dbg_write_mbx(struct dbg_port *dbg, uint32_t val)
  * @dbg: debug port
  * @insn: instruction to execute
  */
-static void dbg_exec_insn(struct dbg_port *dbg, uint32_t insn)
+static void dbg_urv_exec_insn(struct dbg_port *dbg, uint32_t insn)
 {
 	uint32_t reg;
 
 	reg = WRC_CPU_CSR_DBG_CORE0_INSN;
 	reg += sizeof(uint32_t) * dbg->cpu;
 
-	dbg_writel(dbg, reg, insn);
+	dbg_urv_writel(dbg, reg, insn);
 }
 
 /**
@@ -2542,9 +2542,9 @@ static void dbg_exec_insn(struct dbg_port *dbg, uint32_t insn)
  * @dbg: debug port
  * @reg: register index
  */
-static void dbg_exec_reg_to_mbx(struct dbg_port *dbg, uint32_t reg)
+static void dbg_urv_exec_reg_to_mbx(struct dbg_port *dbg, uint32_t reg)
 {
-	dbg_exec_insn(dbg, 0x7D001073 | (reg << 15));
+	dbg_urv_exec_insn(dbg, 0x7D001073 | (reg << 15));
 }
 
 /**
@@ -2552,18 +2552,18 @@ static void dbg_exec_reg_to_mbx(struct dbg_port *dbg, uint32_t reg)
  * @dbg: debug port
  * @reg: register index
  */
-static void dbg_exec_mbx_to_reg(struct dbg_port *dbg, uint32_t reg)
+static void dbg_urv_exec_mbx_to_reg(struct dbg_port *dbg, uint32_t reg)
 {
-	dbg_exec_insn(dbg, 0x7D002073 | (reg << 7));
+	dbg_urv_exec_insn(dbg, 0x7D002073 | (reg << 7));
 }
 
 /**
  * Execute NOP instruction
  * @dbg: debug port
  */
-static void dbg_exec_nop(struct dbg_port *dbg)
+static void dbg_urv_exec_nop(struct dbg_port *dbg)
 {
-	dbg_exec_insn(dbg, 0x00000013);
+	dbg_urv_exec_insn(dbg, 0x00000013);
 }
 
 /**
@@ -2572,11 +2572,11 @@ static void dbg_exec_nop(struct dbg_port *dbg)
  *
  * Return true when it is in debug mode
  */
-static bool dbg_in_debug_mode(struct dbg_port *dbg)
+static bool dbg_urv_in_debug_mode(struct dbg_port *dbg)
 {
 	uint32_t status;
 
-	status = dbg_readl(dbg, WRC_CPU_CSR_DBG_STATUS);
+	status = dbg_urv_readl(dbg, WRC_CPU_CSR_DBG_STATUS);
 
 	return ((status >> dbg->cpu) & 1);
 }
@@ -2587,36 +2587,36 @@ static bool dbg_in_debug_mode(struct dbg_port *dbg)
  *
  * Return 0 on success, -1 on error and errno is appropriately set
  */
-static int dbg_debug_mode_force_set(struct dbg_port *dbg)
+static int dbg_urv_debug_mode_force_set(struct dbg_port *dbg)
 {
 	int retry;
 
-	if (dbg_in_debug_mode(dbg))
+	if (dbg_urv_in_debug_mode(dbg))
 		return 0;
-	dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
+	dbg_urv_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
 	/* wait to debug to be ready max ~5s */
 	retry = 5000;
 	while (retry >= 0) {
 		struct timespec ts = {0, 1000000};
 
 		nanosleep(&ts, NULL);
-		if (dbg_in_debug_mode(dbg))
+		if (dbg_urv_in_debug_mode(dbg))
 			break;
 		retry--;
 	}
 
 	/* Remove the reset, otherwise the cpu won't be anymore in debug
 	   mode.  */
-	if (dbg_get_cpu_reset(dbg) != 0) {
-		if (!dbg_in_debug_mode(dbg))
+	if (dbg_urv_get_cpu_reset(dbg) != 0) {
+		if (!dbg_urv_in_debug_mode(dbg))
 			fprintf(stderr, "Huhh, cpu not in debug\n");
 		fprintf(stderr, "CPU under reset\n");
-		dbg_set_cpu_reset(dbg, 0);
-		if (!dbg_in_debug_mode(dbg))
+		dbg_urv_set_cpu_reset(dbg, 0);
+		if (!dbg_urv_in_debug_mode(dbg))
 			fprintf(stderr, "Huhh, cpu not anymore in debug\n");
 	}
 
-	dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, 0);
+	dbg_urv_writel(dbg, WRC_CPU_CSR_DBG_FORCE, 0);
 
 	if (retry < 0) {
 		errno = ETIME;
@@ -2632,16 +2632,16 @@ static int dbg_debug_mode_force_set(struct dbg_port *dbg)
  *
  * Return: the register content
  */
-static uint32_t dbg_read_reg(struct dbg_port *dbg, int reg)
+static uint32_t dbg_urv_read_reg(struct dbg_port *dbg, int reg)
 {
 	if (verbose > 2)
-		printf("dbg_read_reg %d\n", reg);
-	dbg_exec_reg_to_mbx(dbg, reg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
+		printf("dbg_urv_read_reg %d\n", reg);
+	dbg_urv_exec_reg_to_mbx(dbg, reg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
 
-	return dbg_read_mbx(dbg);
+	return dbg_urv_read_mbx(dbg);
 }
 
 /**
@@ -2650,11 +2650,11 @@ static uint32_t dbg_read_reg(struct dbg_port *dbg, int reg)
  * @reg: register number [0, 31]
  * @val: value
  */
-static void dbg_write_reg(struct dbg_port *dbg,
+static void dbg_urv_write_reg(struct dbg_port *dbg,
 			       int reg, uint32_t val)
 {
-	dbg_write_mbx(dbg, val);
-	dbg_exec_mbx_to_reg(dbg, reg);
+	dbg_urv_write_mbx(dbg, val);
+	dbg_urv_exec_mbx_to_reg(dbg, reg);
 }
 
 /**
@@ -2663,43 +2663,43 @@ static void dbg_write_reg(struct dbg_port *dbg,
  *
  * Return PC value
  */
-static uint32_t dbg_pc_read_via_ra(struct dbg_port *dbg)
+static uint32_t dbg_urv_pc_read_via_ra(struct dbg_port *dbg)
 {
 	if (verbose > 2)
-		printf("dbg_pc_read_via_ra\n");
-	dbg_exec_insn(dbg, 0x000000ef); /* ra = pc + 4 */
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_reg_to_mbx(dbg, 1);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	return (dbg_read_mbx(dbg) - 4) & 0xFFFFFFFF;
+		printf("dbg_urv_pc_read_via_ra\n");
+	dbg_urv_exec_insn(dbg, 0x000000ef); /* ra = pc + 4 */
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_reg_to_mbx(dbg, 1);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	return (dbg_urv_read_mbx(dbg) - 4) & 0xFFFFFFFF;
 }
 
 /**
  * Write PC using RA content register
  * @dbg: debug port
  */
-static void dbg_pc_write_via_ra(struct dbg_port *dbg)
+static void dbg_urv_pc_write_via_ra(struct dbg_port *dbg)
 {
-	dbg_exec_insn(dbg, 0x00008067); /* ret */
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
+	dbg_urv_exec_insn(dbg, 0x00008067); /* ret */
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
 }
 
 /**
  * Increase PC by 4
  * @dbg: debug port
  */
-static void dbg_pc_advance_4(struct dbg_port *dbg)
+static void dbg_urv_pc_advance_4(struct dbg_port *dbg)
 {
-	dbg_exec_insn(dbg, 0x00000263); /* beqz zero, +4 */
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
+	dbg_urv_exec_insn(dbg, 0x00000263); /* beqz zero, +4 */
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
 }
 
 /**
@@ -2714,7 +2714,7 @@ static int gdb_handle_c(struct dbg_port *dbg,
 		return 0;
 	}
 
-	dbg_exec_insn(dbg, 0x00100073); /* ebreak */
+	dbg_urv_exec_insn(dbg, 0x00100073); /* ebreak */
 	while (1) {
 		int ret;
 		struct pollfd p[2];
@@ -2730,12 +2730,12 @@ static int gdb_handle_c(struct dbg_port *dbg,
 			fflush(stdout);
 		}
 
-		if (dbg_in_debug_mode(dbg)) {
+		if (dbg_urv_in_debug_mode(dbg)) {
 			/*
 			 * TODO not clear but check twice due to possible
 			 * race if the ebreak is not yet executed
 			 */
-			if (dbg_in_debug_mode(dbg)) {
+			if (dbg_urv_in_debug_mode(dbg)) {
 				out->size = snprintf(out->data,
 						     GDB_PACKET_SIZE_MAX,
 						     "S05");
@@ -2768,7 +2768,7 @@ static int gdb_handle_c(struct dbg_port *dbg,
 		}
 		if (p[0].revents & POLLIN) {
 			/* GDB wants something from us */
-			ret = dbg_debug_mode_force_set(dbg);
+			ret = dbg_urv_debug_mode_force_set(dbg);
 			if (ret < 0)
 				fprintf(stderr, "Failed to set debug mode\n");
 			out->size = snprintf(out->data,
@@ -2788,7 +2788,7 @@ static int gdb_handle_D(struct dbg_port *dbg,
 			     struct gdb_packet *out,
 			     struct gdb_packet *in)
 {
-	dbg_exec_insn(dbg, 0x00100073); /* ebreak */
+	dbg_urv_exec_insn(dbg, 0x00100073); /* ebreak */
 	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX, "OK");
 
 	return 0;
@@ -2806,16 +2806,16 @@ static int gdb_handle_g(struct dbg_port *dbg,
 
 	out->size = 0;
 	for (i = 0; i < 32; ++i) {
-		regs[i] = dbg_read_reg(dbg, i);
+		regs[i] = dbg_urv_read_reg(dbg, i);
 		out->size += snprintf(out->data + out->size,
 				      GDB_PACKET_SIZE_MAX,
 				      "%08"PRIx32, htonl(regs[i]));
 	}
-	pc = dbg_pc_read_via_ra(dbg);
+	pc = dbg_urv_pc_read_via_ra(dbg);
 	out->size += snprintf(out->data + out->size,
 			      GDB_PACKET_SIZE_MAX,
 			      "%08"PRIx32, htonl(pc));
-	dbg_write_reg(dbg, 1, regs[1]);
+	dbg_urv_write_reg(dbg, 1, regs[1]);
 
 	return 0;
 }
@@ -2848,11 +2848,11 @@ static int gdb_handle_G(struct dbg_port *dbg,
 	}
 
 	/* Register 32 is pc.  */
-	dbg_write_reg(dbg, 1, ntohl(regs[32]));
-	dbg_pc_write_via_ra(dbg);
+	dbg_urv_write_reg(dbg, 1, ntohl(regs[32]));
+	dbg_urv_pc_write_via_ra(dbg);
 
 	for (i = 1; i < 32; ++i)
-		dbg_write_reg(dbg, i, ntohl(regs[i]));
+		dbg_urv_write_reg(dbg, i, ntohl(regs[i]));
 	out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
 			     "OK");
 
@@ -2925,9 +2925,9 @@ static int gdb_handle_M(struct dbg_port *dbg,
 		return 0;
 	}
 
-	a0 = dbg_read_reg(dbg, 10);
-	a1 = dbg_read_reg(dbg, 11);
-	dbg_write_reg(dbg, 10, addr);
+	a0 = dbg_urv_read_reg(dbg, 10);
+	a1 = dbg_urv_read_reg(dbg, 11);
+	dbg_urv_write_reg(dbg, 10, addr);
 	if (addr % 4 == 0) {
 		for (; n >= 4; n -= 4, indata += 8) {
 			uint32_t w;
@@ -2936,11 +2936,11 @@ static int gdb_handle_M(struct dbg_port *dbg,
 			if (ret != 1)
 				break;
 
-			dbg_write_reg(dbg, 11, ntohl(w));
+			dbg_urv_write_reg(dbg, 11, ntohl(w));
 			/* sw a1, 0(a0) */
-			dbg_exec_insn(dbg, 0x00B52023);
+			dbg_urv_exec_insn(dbg, 0x00B52023);
 			/* addi a0, a0, 4 */
-			dbg_exec_insn(dbg, 0x00450513);
+			dbg_urv_exec_insn(dbg, 0x00450513);
 		}
 	}
 	for (; n > 0; --n, indata += 2) {
@@ -2949,15 +2949,15 @@ static int gdb_handle_M(struct dbg_port *dbg,
 		ret = sscanf(indata, "%02"SCNx32, &b);
 		if (ret != 1)
 			break;
-		dbg_write_reg(dbg, 11, b);
+		dbg_urv_write_reg(dbg, 11, b);
 		/* sb a1, 0(a0) */
-		dbg_exec_insn(dbg, 0x00B50023);
+		dbg_urv_exec_insn(dbg, 0x00B50023);
 		/* addi a0, a0, 4 */
-		dbg_exec_insn(dbg, 0x00150513);
+		dbg_urv_exec_insn(dbg, 0x00150513);
 	}
 
-	dbg_write_reg(dbg, 10, a0);
-	dbg_write_reg(dbg, 11, a1);
+	dbg_urv_write_reg(dbg, 10, a0);
+	dbg_urv_write_reg(dbg, 11, a1);
 
 	if (n > 0)
 		out->size = snprintf(out->data, GDB_PACKET_SIZE_MAX,
@@ -2986,23 +2986,23 @@ static int gdb_handle_m(struct dbg_port *dbg,
 				     "E01");
 		return 0;
 	}
-	a0 = dbg_read_reg(dbg, 10);
-	a1 = dbg_read_reg(dbg, 11);
-	dbg_write_reg(dbg, 10, addr);
+	a0 = dbg_urv_read_reg(dbg, 10);
+	a1 = dbg_urv_read_reg(dbg, 11);
+	dbg_urv_write_reg(dbg, 10, addr);
 	out->size = 0;
 	for (; n > 0; --n) {
 		uint8_t b;
 
-		dbg_exec_insn(dbg, 0x00054583); /* lbu a1, 0(a0) */
-		dbg_exec_insn(dbg, 0x00150513); /* addi a0, a0, 1 */
-		b = dbg_read_reg(dbg, 11);
+		dbg_urv_exec_insn(dbg, 0x00054583); /* lbu a1, 0(a0) */
+		dbg_urv_exec_insn(dbg, 0x00150513); /* addi a0, a0, 1 */
+		b = dbg_urv_read_reg(dbg, 11);
 		out->size += snprintf(out->data + out->size,
 				      GDB_PACKET_SIZE_MAX,
 				      "%02"PRIx8, b);
 	}
 
-	dbg_write_reg(dbg, 10, a0);
-	dbg_write_reg(dbg, 11, a1);
+	dbg_urv_write_reg(dbg, 10, a0);
+	dbg_urv_write_reg(dbg, 11, a1);
 
 	return 0;
 }
@@ -3098,36 +3098,36 @@ static int gdb_handle_qRcmd(struct dbg_port *dbg,
 	else if (strcmp(buf, "csr") == 0) {
 		uint32_t ra;
 		uint32_t mepc, mstatus, mcause;
-		ra = dbg_read_reg(dbg, 1);
-		dbg_exec_insn(dbg, 0x341020f3); /* csrr ra,mepc */
-		mepc = dbg_read_reg(dbg, 1);
-		dbg_exec_insn(dbg, 0x342020f3); /* csrr ra,mcause */
-		mcause = dbg_read_reg(dbg, 1);
-		dbg_exec_insn(dbg, 0x300020f3); /* csrr ra,mstatus */
-		mstatus = dbg_read_reg(dbg, 1);
-		dbg_write_reg(dbg, 1, ra);
+		ra = dbg_urv_read_reg(dbg, 1);
+		dbg_urv_exec_insn(dbg, 0x341020f3); /* csrr ra,mepc */
+		mepc = dbg_urv_read_reg(dbg, 1);
+		dbg_urv_exec_insn(dbg, 0x342020f3); /* csrr ra,mcause */
+		mcause = dbg_urv_read_reg(dbg, 1);
+		dbg_urv_exec_insn(dbg, 0x300020f3); /* csrr ra,mstatus */
+		mstatus = dbg_urv_read_reg(dbg, 1);
+		dbg_urv_write_reg(dbg, 1, ra);
 		snprintf(buf, sizeof(buf),
 			 "mepc:    %08x\nmcause:  %08x\nmstatus: %08x\n",
 			 mepc, mcause, mstatus);
 	}
 	else if (strcmp(buf, "reset") == 0) {
 		/* Reset the cpu.  */
-		dbg_set_cpu_reset(dbg, 1);
+		dbg_urv_set_cpu_reset(dbg, 1);
 		/* Force debug mode, otherwire it is cleared by reset.  */
-		dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
+		dbg_urv_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
 		/* Release reset.  */
-		dbg_set_cpu_reset(dbg, 0);
+		dbg_urv_set_cpu_reset(dbg, 0);
 		/* Release force debug.  */
-		dbg_writel(dbg, WRC_CPU_CSR_DBG_FORCE, 0);
-		if (!dbg_in_debug_mode(dbg))
+		dbg_urv_writel(dbg, WRC_CPU_CSR_DBG_FORCE, 0);
+		if (!dbg_urv_in_debug_mode(dbg))
 		  fprintf(stderr, "Huhh, cpu not in debug\n");
 		strcpy(buf, "board reset\n");
 	}
 	else if (strcmp(buf, "port") == 0) {
 		snprintf(buf, sizeof(buf),
 			 "rst: %04x\ndbg st: %04x\n",
-			 dbg_readl (dbg, WRC_CPU_CSR_RESET),
-			 dbg_readl (dbg, WRC_CPU_CSR_DBG_STATUS));
+			 dbg_urv_readl (dbg, WRC_CPU_CSR_RESET),
+			 dbg_urv_readl (dbg, WRC_CPU_CSR_DBG_STATUS));
 	}
 	else {
 		strcpy(buf,"unhandled mon command, try 'mon help'\n");
@@ -3170,36 +3170,36 @@ static int gdb_handle_s(struct dbg_port *dbg,
 	}
 
 	/* Get ra(x1) and pc  */
-	ra = dbg_read_reg(dbg, 1);
-	pc = dbg_pc_read_via_ra(dbg);
+	ra = dbg_urv_read_reg(dbg, 1);
+	pc = dbg_urv_pc_read_via_ra(dbg);
 
 	/* Read the instruction to be executed (at pc) */
-	dbg_write_reg(dbg, 1, pc);
-	dbg_exec_insn(dbg, 0x0000A083) ;/* lw ra,0(ra) */
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
-	insn = dbg_read_reg(dbg, 1);
+	dbg_urv_write_reg(dbg, 1, pc);
+	dbg_urv_exec_insn(dbg, 0x0000A083) ;/* lw ra,0(ra) */
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
+	insn = dbg_urv_read_reg(dbg, 1);
 	if (verbose)
 		fprintf(stdout, "execute: %08"PRIx32" at pc=%08"PRIx32,
 			insn, pc);
 
 	/* Restore ra */
-	dbg_write_reg(dbg, 1, ra);
+	dbg_urv_write_reg(dbg, 1, ra);
 
 	/* Execute the instruction */
-	dbg_exec_insn(dbg, insn);
-	dbg_exec_nop(dbg);
-	dbg_exec_nop(dbg);
+	dbg_urv_exec_insn(dbg, insn);
+	dbg_urv_exec_nop(dbg);
+	dbg_urv_exec_nop(dbg);
 	switch (insn & 0x77) {
 	case 0x67: /* jump */
 		/* Nothing to do, PC is always updated */
 		break;
 	case 0x63: /* branch */
 		/* Read new PC */
-		ra = dbg_read_reg(dbg, 1);
-		npc = dbg_pc_read_via_ra(dbg);
-		dbg_write_reg(dbg, 1, ra);
+		ra = dbg_urv_read_reg(dbg, 1);
+		npc = dbg_urv_pc_read_via_ra(dbg);
+		dbg_urv_write_reg(dbg, 1, ra);
 		/* In case of no change, the branch has not been taken,
 		   so the PC needs to be updated to the next instruction.
 		   If the branch has been taken, the PC has been updated.
@@ -3207,12 +3207,12 @@ static int gdb_handle_s(struct dbg_port *dbg,
 		   current instruction.  Maybe decode the instruction
 		   further. */
 		if (npc == pc)
-			dbg_pc_advance_4(dbg);
+			dbg_urv_pc_advance_4(dbg);
 		break;
 	default:
 		/* The instruction has been executed, the pc needs to
 		   be updated */
-		dbg_pc_advance_4(dbg);
+		dbg_urv_pc_advance_4(dbg);
 		break;
 	}
 
@@ -3299,7 +3299,7 @@ static int gdb_handle_X(struct dbg_port *dbg,
 	return 0;
 }
 
-static gdb_command_t *gdb_packet_exec[] = {
+static gdb_command_t * const gdb_packet_exec[] = {
 	['c'] = gdb_handle_c,
 	['D'] = gdb_handle_D,
 	['g'] = gdb_handle_g,
@@ -3549,7 +3549,7 @@ static int debugger_run(struct dbg_port *dbg)
 	in = &pkt[0];
 	out = &pkt[1];
 
-	ret = dbg_debug_mode_force_set(dbg);
+	ret = dbg_urv_debug_mode_force_set(dbg);
 	if (ret < 0) {
 		fprintf(stderr, "Failed to set debug mode\n");
 		return -1;
