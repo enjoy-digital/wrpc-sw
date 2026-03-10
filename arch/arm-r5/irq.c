@@ -86,7 +86,6 @@ init_irq(void)
     unsigned cpu;
 
     /* Disable interrupt */
-    ICDIPTR(SPLL_IRQ / 4) &= ~(0x3 << (8 * (SPLL_IRQ & 0x3)));
     ICDICER(SPLL_IRQ / 32) = 1 << (SPLL_IRQ & 0x1f);
 
     /* Set sensitivity to level (00) */
@@ -99,6 +98,7 @@ init_irq(void)
 
     /* Target my CPU */
     cpu = read_mpidr() & 0xff;
+    ICDIPTR(SPLL_IRQ / 4) &= ~(0xff << (8 * (SPLL_IRQ & 0x3)));
     ICDIPTR(SPLL_IRQ / 4) |= (1 << cpu) << (8 * (SPLL_IRQ & 0x3));
 
     /* Enable */
@@ -106,6 +106,8 @@ init_irq(void)
 
     /* Enable distributor */
     ICDDCR = 1;
+
+    /* TODO: EOI interrupt if active ? */
 }
 
 void disable_irq(void)
