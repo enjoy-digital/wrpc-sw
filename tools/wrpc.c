@@ -2092,6 +2092,8 @@ static void help_spll_recorder(void)
 
 static const char *dbg_source_to_string(int src)
 {
+	static char str[16];
+
 	switch (src)
 	{
 	case SPLL_DBG_SRC_HELPER:
@@ -2111,12 +2113,15 @@ static const char *dbg_source_to_string(int src)
 	case SPLL_DBG_SRC_RAW:
 		return "raw";
 	default:
-		return "<unknown?>";
+		snprintf(str, sizeof(str), "%d", src);
+		return str;
 	}
 }
 
 static const char *dbg_signal_to_string(int src)
 {
+	static char str[16];
+
 	switch (src)
 	{
 	case SPLL_DBG_SIGNAL_ERR:
@@ -2140,12 +2145,15 @@ static const char *dbg_signal_to_string(int src)
 	case SPLL_DBG_SIGNAL_SRC:
 		return "source";
 	default:
-		return "<unknown?>";
+		snprintf(str, sizeof(str), "%d", src);
+		return str;
 	}
 }
 
 static const char *dbg_event_to_string(int src)
 {
+	static char str[16];
+
 	switch (src)
 	{
 	case SPLL_DBG_EVT_GAIN_SWITCH:
@@ -2157,7 +2165,8 @@ static const char *dbg_event_to_string(int src)
 	case SPLL_DBG_EVT_START:
 		return "start";
 	default:
-		return "<unknown?>";
+		snprintf(str, sizeof(str), "%d", src);
+		return str;
 	}
 }
 
@@ -2206,12 +2215,9 @@ void spll_dump_debug_data(const uint32_t *buf, size_t size)
 		}
 
 		if (sig == SPLL_DBG_SIGNAL_EVENT)
-		{
 			printf("event=%s ", dbg_event_to_string(value));
-		}
-
-		printf("%s=%d ", dbg_signal_to_string(sig),
-			   value);
+		else
+			printf("%s=%d ", dbg_signal_to_string(sig), value);
 
 		if (SPLL_DBG_IS_LAST_RECORD(x))
 		{
