@@ -24,7 +24,7 @@ struct reg_desc {
 	unsigned addr;
 };
 
-static const struct reg_desc regs[] = {
+static const struct reg_desc ep_regs[] = {
 	{ "msr", EP_MDIO_MSR },
 	{ "mcr", EP_MDIO_MCR },
 	{ "lpdc-ctrl", EP_MDIO_PHY_SPECIFIC_REGS + LPDC_MDIO_CTRL },
@@ -59,7 +59,7 @@ int cmd_ep(const char *args[])
 	case 1:	{
 		/* "rd" read a register */
 		const struct reg_desc *r;
-		for (r = regs; r->name; r++)
+		for (r = ep_regs; r->name; r++)
 			if (!strcmp(r->name, args[1]))
 				break;
 		if (r->name == NULL)
