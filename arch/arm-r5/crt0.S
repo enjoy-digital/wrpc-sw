@@ -147,9 +147,12 @@ _boot:
 	mcr     p15, 0, r0, c1, c0, 1       /* Write ACTLR*/
 
 	/* Enable MPU, icache and dcache */
-	mrc 	p15,0,r1,c1,c0,0
+	mrc 	p15,0,r1,c1,c0,0		/* SCTLR */
 	ldr	r0, =0x1005
 	orr 	r1,r1,r0
+	bic	r1,r1,#(1<<25)			/* Clear EE */
+	bic	r1,r1,#(1<<24)			/* Clear VE */
+	bic	r1,r1,#(1<<13)			/* Clear V */
 	dsb
 	mcr	p15,0,r1,c1,c0,0		/* Enable cache  */
 	isb					/* isb	flush prefetch buffer */
