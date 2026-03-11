@@ -46,8 +46,6 @@ read_mpidr(void)
 static void
 init_gic(void)
 {
-    unsigned cpu;
-
     /* Disable GIC distributor */
     ICDDCR = 0;
 
@@ -103,11 +101,6 @@ init_irq(void)
 
     /* Enable */
     ICDISER(SPLL_IRQ / 32) = 1 << (SPLL_IRQ & 0x1f);
-
-    /* Enable distributor */
-    ICDDCR = 1;
-
-    /* TODO: EOI interrupt if active ? */
 }
 
 void disable_irq(void)
