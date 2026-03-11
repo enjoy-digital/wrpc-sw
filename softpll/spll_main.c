@@ -375,6 +375,22 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 
 	if (s->tag_ref >= 0 && s->tag_out >= 0) {
 		/* If there are both ref and out tags, ... */
+#ifdef CONFIG_LOCKSWEEP
+		if((s->locksweep_interrupt_cycles--) > 0)
+		{
+			if(!(s->vco_freeze))
+			{
+				SPLL->DAC_MAIN = SPLL_DAC_MAIN_VALUE_W(s->pi.y)
+					| SPLL_DAC_MAIN_DAC_SEL_W(s->dac_index);
+			}
+
+			// discard both tags. much necessary to keep the interval steady.
+			s->tag_out = -1;
+			s->tag_ref = -1;
+			return;
+		}
+#endif
+
 #ifndef CONFIG_FRAC_SPLL
 		if (s->discard_early_cnt == 1) {
 			int adj_ref = s->tag_ref + s->adder_ref;

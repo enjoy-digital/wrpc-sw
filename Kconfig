@@ -989,6 +989,10 @@ config LATENCY_SYSLOG
 	bool "Report latency problems to syslog"
 	default y
 
+config LOCKSWEEP
+	bool "Lock sweep support"
+    depends on DEVELOPER
+
 config DEFAULT_PRINT_TASK_TIME_THRESHOLD
         depends on DEVELOPER
         default 0
