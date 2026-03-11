@@ -887,7 +887,7 @@ config VERBOSE_DETAIL
        bool "Display meaning of each digit for the 'verbose' command"
 
 config LTO
-	bool
+	bool "Enable LTO (link time optimization) to reduce binary size"
 	default n if TARGET_WR_SWITCH
 	default y if ARCH_RISCV
 	default n
