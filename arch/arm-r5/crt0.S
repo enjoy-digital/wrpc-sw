@@ -171,15 +171,15 @@ _boot:
 	bl	map_tcm
 #endif
 
-	/* Clear BSS */
+	/* Clear BSS and stacks (to clear ECC) */
 	mov	r0, #0
 
-	ldr	r1,=__bss_start__
-	ldr	r2,=__bss_end__
+	ldr	r2,=__bss_start__
+	ldr	r3,=__stacks_end__
 0:
-	cmp	r1,r2
+	cmp	r2,r3
 	bge	1f
-	str	r0, [r1], #4
+	str	r0, [r2], #4
 	b	0b
 
 1:
