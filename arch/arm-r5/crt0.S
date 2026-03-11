@@ -190,13 +190,16 @@ _boot:
 	add r1, r1, #1
 	str r1, [r3]
 
+	/* Wait for init from cpu #0 */
+	bl	_init_sync
+
 	bl	main			/* Jump to main C code */
 
 
 .text
 _irq_handler:
 	stmdb	sp!,{r0-r3,r12,lr}
-	bl	spll_irq_entry			/* IRQ vector */
+	bl	irq_entry			/* IRQ vector */
 	ldmia	sp!,{r0-r3,r12,lr}
 	subs	pc, lr, #4			/* adjust return */
 

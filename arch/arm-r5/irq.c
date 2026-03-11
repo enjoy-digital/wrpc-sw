@@ -9,9 +9,11 @@
 #include <stdint.h>
 #include "pp-printf.h"
 
-/* CPSR bits */
-#define R5_CPSR_FIQ (1<<6)
-#define R5_CPSR_IRQ (1<<7)
+/* 121: PL_PS_Group0[0],
+   136: PL_PS_Group1[0] */
+#define SPLL_IRQ 121
+
+#define SGI_IRQ 0
 
 /* GICv1 */
 #define RCPU_GIC 0xf9000000
@@ -22,6 +24,7 @@
 #define ICDIPR(n)  *(((uint32_t *)(RCPU_GIC + 0x400)) + n) //Int. Priority
 #define ICDIPTR(n) *(((uint32_t *)(RCPU_GIC + 0x800)) + n) //Int. Proc Target
 #define ICDICFR(n) *(((uint32_t *)(RCPU_GIC + 0xC00)) + n) //Int. Configuration
+#define ICDSGIR	   *((uint32_t *)(RCPU_GIC + 0xF00))  //Software generated Int
 #define ICCICR	   *((uint32_t *)(RCPU_GIC + 0x1000)) //CPU interface control
 #define ICCPMR	   *((uint32_t *)(RCPU_GIC + 0x1004)) //Priority mask
 #define ICCIAR	   *((uint32_t *)(RCPU_GIC + 0x100C)) //Int. Acknoledge
@@ -31,8 +34,8 @@
 
 #define PL_IRQ 121
 
-void
-init_irq(void)
+static void
+init_gic(void)
 {
     /* Disable GIC distributor */
     ICDDCR = 0;
@@ -42,6 +45,34 @@ init_irq(void)
 
     /* Set GIC priority mask (to 0xff, the lowest) */
     ICCPMR = 0xff;
+
+    /* Enable distributor */
+    ICDDCR = 1;
+
+    /* TODO: EOI interrupt if active ? */
+}
+
+static void
+wait_start_irq(void)
+{
+    /* Enable SGI_IRQ */
+    ICDIPR(SGI_IRQ / 4) &= ~(0xff << (8 * (SGI_IRQ & 0x03)));
+    ICDIPR(SGI_IRQ / 4) |= 0xf0 << (8 * (SGI_IRQ & 0x03));
+    ICDISER(SGI_IRQ / 32) = 1 << (SGI_IRQ & 0x1f);
+
+    /* Send SGI */
+    ICDSGIR = SGI_IRQ | (1 << (16 + 0));
+
+    /* Wait for SGI */
+    enable_irq();
+    asm volatile ("wfi");
+    disable_irq();
+}
+
+void
+init_irq(void)
+{
+    unsigned cpu;
 
     /* Disable interrupt */
     ICDIPTR(PL_IRQ / 4) &= ~(0x3 << (8 * (PL_IRQ & 0x3)));
@@ -75,9 +106,14 @@ void enable_irq(void)
 	asm volatile ("cpsie i");
 }
 
-void clear_irq(void)
+extern void irq_entry(void);
+
+void irq_entry(void)
 {
 	unsigned iack = ICCIAR;
+
+	if (iack == SPLL_IRQ)
+		spll_irq_entry();
 	ICCEOIR = iack;
 }
 
@@ -189,4 +225,13 @@ _init_mpu(void)
     write_mpu_num(n++);
     write_mpu_size(0);
   }
+}
+
+extern void _init_sync(void);
+
+void
+_init_sync(void)
+{
+  init_gic();
+  wait_start_irq();
 }
