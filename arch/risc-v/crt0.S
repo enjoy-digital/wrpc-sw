@@ -31,11 +31,6 @@ ppg_static_addr:
 	.word  ppg_static
 #endif
 
-	.org UPTIME_SEC_ADDR
-	.global uptime_sec
-uptime_sec:
-	.word  0
-
 	.org VERSION_WRPC_ADDR
 version_wrpc:
 	.byte  WRPC_SHMEM_VERSION

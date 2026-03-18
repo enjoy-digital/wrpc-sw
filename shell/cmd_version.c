@@ -31,6 +31,9 @@
 #ifdef CONFIG_ARCH_LM32
 #define ARCH_STRING "LM32"
 #endif
+#ifdef CONFIG_ARCH_ARM_R5
+#define ARCH_STRING "ARM-R5"
+#endif
 
 int cmd_ver(const char *args[])
 {

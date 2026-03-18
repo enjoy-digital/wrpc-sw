@@ -234,6 +234,8 @@ void init_hw_after_reset(void)
 
 /* count uptime, in seconds, for remote polling */
 static uint32_t uptime_lastj;
+uint32_t uptime_sec;
+
 void init_uptime(void)
 {
 	uptime_lastj = timer_get_tics();
@@ -241,7 +243,6 @@ void init_uptime(void)
 
 int update_uptime(void)
 {
-	extern uint32_t uptime_sec;
 	uint32_t j;
 	static uint32_t fraction = 0;
 

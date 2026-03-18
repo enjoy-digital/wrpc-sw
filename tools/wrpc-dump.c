@@ -53,7 +53,6 @@ static unsigned riscv_stats_paddr = STATS_PADDR;
 #undef PPG_STATIC_PADDR
 #undef STATS_PADDR
 
-#undef UPTIME_SEC_ADDR
 #undef HDL_TESTBENCH_PADDR
 
 #include <arch/lm32/crt0.h>
@@ -74,7 +73,6 @@ static unsigned lm32_v42_ppi_addr = 0x98;
 #undef PPG_STATIC_PADDR
 #undef STATS_PADDR
 
-#undef UPTIME_SEC_ADDR
 #undef HDL_TESTBENCH_PADDR
 
 /* argv[0] */

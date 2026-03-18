@@ -15,7 +15,6 @@
 
 #define PPG_STATIC_PADDR	0x1c
 #define STATS_PADDR		0x20
-#define UPTIME_SEC_ADDR		0x24
 #define VERSION_WRPC_ADDR	0x28
 #define VERSION_PPSI_ADDR	0x29
 

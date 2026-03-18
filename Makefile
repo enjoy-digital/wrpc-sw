@@ -7,9 +7,11 @@
 # use a cross compiler depending on architecture
 CROSS_COMPILE_LM32 ?= lm32-elf-
 CROSS_COMPILE_RISCV ?= riscv32-elf-
+CROSS_COMPILE_ARM_EABI ?= arm-none-eabi-
 
 CROSS_COMPILE-$(CONFIG_ARCH_LM32) ?= $(CROSS_COMPILE_LM32)
 CROSS_COMPILE-$(CONFIG_ARCH_RISCV) ?= $(CROSS_COMPILE_RISCV)
+CROSS_COMPILE-$(CONFIG_ARCH_ARM_R5) ?= $(CROSS_COMPILE_ARM_EABI)
 # cross compiler to produce programs to be run on ARM cpu on WRSv3
 CROSS_COMPILE_TARGET_HOST-$(CONFIG_TARGET_WR_SWITCH) ?= $(CROSS_COMPILE_ARM)
 
@@ -47,9 +49,11 @@ MAKEALL_COPY_LIST=.bin .elf
 # we miss CONFIG_ARCH_LM32 as we have no other archs by now
 obj-$(CONFIG_ARCH_LM32) = arch/lm32/crt0.o arch/lm32/irq.o
 obj-$(CONFIG_ARCH_RISCV) = arch/risc-v/crt0.o arch/risc-v/irq.o arch/risc-v/irq_helper.o
+obj-$(CONFIG_ARCH_ARM_R5) = arch/arm-r5/crt0.o arch/arm-r5/irq.o
 # silently assume WR_NODE for the next two
 LDS-$(CONFIG_ARCH_LM32)   = arch/lm32/ram.ld
 LDS-$(CONFIG_ARCH_RISCV)  = arch/risc-v/ram.ld
+LDS-$(CONFIG_ARCH_ARM_R5)   = arch/arm-r5/ram.ld
 LDS-$(CONFIG_TARGET_WR_SWITCH) = arch/risc-v/ram-wrs.ld
 LDS-$(CONFIG_HOST_PROCESS) =
 
@@ -75,6 +79,7 @@ cflags-$(CONFIG_LTO) += -flto
 # Only for lm32
 cflags-$(CONFIG_ARCH_LM32)  +=  -Iinclude/std
 cflags-$(CONFIG_ARCH_RISCV) +=  -Iinclude/std
+cflags-$(CONFIG_ARCH_ARM_R5) +=  -Iinclude/std
 
 cflags-$(CONFIG_WRPC_PPSI) += \
 	-I$(PPSI)/arch-wrpc \
@@ -104,6 +109,7 @@ obj-$(CONFIG_EMBEDDED_NODE) += \
 
 archflags-$(CONFIG_ARCH_LM32) = -mmultiply-enabled -mbarrel-shift-enabled
 archflags-$(CONFIG_ARCH_RISCV) = -march=rv32im$(USE-COMP-INSTR-y) -mabi=ilp32
+archflags-$(CONFIG_ARCH_ARM_R5) = -mfloat-abi=hard -mfpu=vfpv3-d16 -march=armv7-r+fp -mthumb -mtune=cortex-r5 -mno-unaligned-access
 
 # Note: RISC-V is special as it needs extra -march flags for the assembler in
 #  order to allow system instructions
@@ -113,6 +119,7 @@ asflags-$(CONFIG_ARCH_RISCV) += -march=rv32im$(USE-COMP-INSTR-y)_zicsr
 cflags-y += $(archflags-y)
 ldflags-$(CONFIG_ARCH_LM32) = $(archflags-y) -nostdlib -T $(LDS-y)
 ldflags-$(CONFIG_ARCH_RISCV) = $(archflags-y) -nostdlib -T $(LDS-y)
+ldflags-$(CONFIG_ARCH_ARM_R5) = $(archflags-y) -nostdlib -T $(LDS-y)
 
 arch-files-$(CONFIG_ARCH_LM32) = $(OUTPUT).bram $(OUTPUT).vhd $(OUTPUT).mif $(OUTPUT).mem
 arch-files-$(CONFIG_ARCH_RISCV) = $(OUTPUT).bram $(OUTPUT).vhd $(OUTPUT).mif $(OUTPUT).mem
@@ -211,6 +218,7 @@ $(OUTPUT).elf: $(LDS-y) $(AUTOCONF) gitmodules config.o $(OBJS)
 
 OBJCOPY-TARGET-$(CONFIG_ARCH_LM32) = -O elf32-lm32 -B lm32
 OBJCOPY-TARGET-$(CONFIG_ARCH_RISCV) = -O elf32-littleriscv -B riscv
+OBJCOPY-TARGET-$(CONFIG_ARCH_ARM_R5) = -O elf32-littlearm -B armv7
 OBJCOPY-TARGET-$(CONFIG_HOST_PROCESS) = -O elf64-x86-64 -B i386
 
 config.o: .config

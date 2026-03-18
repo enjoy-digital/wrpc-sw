@@ -128,11 +128,6 @@ _true_reset:
 	.word stats
 #endif
 	
-.org UPTIME_SEC_ADDR
-.global uptime_sec
-uptime_sec:
-	.word 0
-
 .org VERSION_WRPC_ADDR
 .global version_wrpc
 version_wrpc:
