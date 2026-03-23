@@ -22,18 +22,18 @@ _IRQ_STACK_SIZE = 0x200;
 
 SECTIONS
 {
-    .text : AT (ATCM_LOADADDR) {
+    .text : {
 	KEEP(*(.vector_table))
 	*(.text)
 	*(.text.*)
         . = ALIGN(8);
     } > atcm
-    .rodata : AT (BTCM_LOADADDR) {
+    .rodata : {
         *(.rodata)
 	*(.rodata.*)
         . = ALIGN(8);
     } > btcm
-    .data : AT (BTCM_LOADADDR + SIZEOF(.rodata)) {
+    .data : {
         *(.data)
 	*(.data.*)
         . = ALIGN(8);
