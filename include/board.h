@@ -53,6 +53,8 @@
 #  include "boards/wr2rf-vme/board-config.h"
 #elif defined(CONFIG_TARGET_AMD_DEVBOARD)
 #  include "boards/amd-devboard/board-config.h"
+#elif defined(CONFIG_TARGET_DIOT)
+#  include "boards/diot/board-config.h"
 #else
 #  error no board defined
 #endif
