@@ -96,6 +96,11 @@ config TARGET_AMD_DEVBOARD
 	help
 	  Currently supported: ZC706, ZCU102, ZCU106
 
+config TARGET_DIOT
+	bool "DIOT System Board"
+	help
+	  Currently supported: v3, v4, v5
+
 endchoice
 
 config WR_NODE_SIM

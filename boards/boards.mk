@@ -6,6 +6,7 @@ obj-$(CONFIG_TARGET_WR_SWITCH) += boards/wr-switch/main.o boards/wr-switch/gpio-
 obj-$(CONFIG_TARGET_AFCZ_V1) += boards/afcz/board.o
 obj-$(CONFIG_TARGET_AFCZ_V2) += boards/afcz/board.o
 obj-$(CONFIG_TARGET_SIS8300KU) += boards/sis8300ku/board.o
+obj-$(CONFIG_TARGET_DIOT) += boards/diot/board.o
 
 obj-$(CONFIG_TARGET_ERTM14) += \
 	boards/ertm14/board.o \
