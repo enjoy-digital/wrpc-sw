@@ -139,34 +139,33 @@ static void wrc_initialize(void)
 	temp_zynqus_sysmon_init();
 #endif
 
-#if defined CONFIG_AUX_TIMING_EN
+#ifdef CONFIG_AUX_TIMING_EN
 
-	#if defined(CONFIG_AUXCLK_EN)
-    auxclk_init(CONFIG_AUXCLK_FREQ, CONFIG_AUXCLK_DUTY);
-  #endif
+#  ifdef CONFIG_AUXCLK_EN
+	auxclk_init(CONFIG_AUXCLK_FREQ, CONFIG_AUXCLK_DUTY);
+#  endif
 
-  #if defined(CONFIG_NMEA_OUT_EN)
-    struct timecode *wrc_timecode =  ((struct timecode *)(BASE_TIMECODE));
-    #if defined(CONFIG_NMEA_OUT_INVERT)
+#  ifdef CONFIG_NMEA_OUT_EN
+	struct timecode *wrc_timecode =  ((struct timecode *)(BASE_TIMECODE));
+#    ifdef CONFIG_NMEA_OUT_INVERT
     	nmea_out_init(&wrc_timecode->nmea, CONFIG_NMEA_OUT_BAUD, 1);
-    #else
+#    else
     	nmea_out_init(&wrc_timecode->nmea, CONFIG_NMEA_OUT_BAUD, 0);
-    #endif
-  #endif
+#    endif
+#  endif
 
   //mux setup
-  #if defined(CONFIG_AUXTMG_SEL_CLK)
-    timecode_sel(TIMECODE_SEL_CLK);
-  #endif
+#  ifdef CONFIG_AUXTMG_SEL_CLK
+	timecode_sel(TIMECODE_SEL_CLK);
+#  endif
 
-  #if defined(CONFIG_AUXTMG_SEL_IRIG)
-    timecode_sel(TIMECODE_SEL_IRIG);
-  #endif
+#  ifdef CONFIG_AUXTMG_SEL_IRIG
+	timecode_sel(TIMECODE_SEL_IRIG);
+#  endif
 
-  #if defined(CONFIG_AUXTMG_SEL_NMEA)
-    timecode_sel(TIMECODE_SEL_NMEA);
-  #endif
-
+#  ifdef CONFIG_AUXTMG_SEL_NMEA
+	timecode_sel(TIMECODE_SEL_NMEA);
+#  endif
 #endif
 
 	wrc_board_init();
