@@ -2873,6 +2873,16 @@ static int dbg_urv_debug_mode_force_set(struct dbg_port *dbg)
 {
 	int retry;
 
+	if (verbose > 1) {
+		printf ("debug_mode_force_set (cpu=%u):\n", dbg->cpu);
+		printf ("csr_reset: %x\n",
+			dbg_urv_get_cpu_reset(dbg));
+		printf ("dbg_status: %x\n",
+			dbg_urv_readl(dbg, WRC_CPU_CSR_DBG_STATUS));
+		printf ("dbg_force: %x\n",
+			dbg_urv_readl(dbg, WRC_CPU_CSR_DBG_FORCE));
+	}
+
 	if (dbg_urv_in_debug_mode(dbg))
 		return 0;
 	dbg_urv_writel(dbg, WRC_CPU_CSR_DBG_FORCE, (1 << dbg->cpu));
@@ -4039,6 +4049,12 @@ static int do_gdbserver(int argc, char *argv[])
 	dbg.cmds = gdb_urv_commands;
 	dbg.n_cmds = sizeof(gdb_urv_commands) / sizeof(gdb_urv_commands[0]);
 	dbg.post_connect_hook = dbg_urv_debug_mode_force_set;
+	dbg.cpu = 0;
+
+	if (argc > 1 && !strcmp(argv[1], "-r")) {
+		remove_arg1(&argc, argv);
+		wrpc_v5_reset(board, 1);
+	}
 
 	ret = gdb_server(&dbg, argc, argv);
 
@@ -4377,6 +4393,7 @@ static int do_aux_logger(int argc, char *argv[])
 
 	return 0;
 }
+#endif /* !defined(SUPPORT_WRS) */
 
 /**
  * RPU Base Address
