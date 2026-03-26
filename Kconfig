@@ -511,6 +511,13 @@ config TEMP_SENSORS
 	  Please note that temperature sensor type has to be selected as well
 	  (like w1)
 
+config ZYNQUS_TEMP
+	depends on TEMP_SENSORS
+	boolean "Add support for sysmon temperature sensor on ZynqUS+"
+	default n
+	help
+	  Add support for sysmon temperature sensor on ZynqUS+
+
 config GENERIC_SENSORS
        depends on WR_NODE
        boolean "Add support for generic sensors"

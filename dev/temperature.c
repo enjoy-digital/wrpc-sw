@@ -16,27 +16,21 @@
 
 struct wrc_temp_group temp_sensors[WRC_MAX_TEMPERATURES];
 
-/*
- * Library functions
- */
-uint32_t wrc_temp_get(char *name)
+/* Get the temperature by the name of the sensor */
+int32_t wrc_temp_get(const char *name)
 {
-	struct wrc_temp_sensor *temp_sensor;
-	struct wrc_temp_group *temp_group;
 	int i;
-
-	if (!name)
-		return TEMP_INVALID;
 
 	/* get search all temperature groups */
 	for (i = 0; i < WRC_MAX_TEMPERATURES; i++) {
-		temp_group = &temp_sensors[i];
+		struct wrc_temp_sensor *sensor;
+		struct wrc_temp_group *group;
+		group = &temp_sensors[i];
 
 		/* search all sensors within group */
-		for (temp_sensor = temp_group->t; temp_sensor->name;
-		     temp_sensor++) {
-			if (!strcmp(name, temp_sensor->name)) {
-				return temp_sensor->t;
+		for (sensor = group->t; sensor && sensor->name; sensor++) {
+			if (!strcmp(name, sensor->name)) {
+				return sensor->t;
 			}
 		}
 	}
@@ -44,6 +38,7 @@ uint32_t wrc_temp_get(char *name)
 	return TEMP_INVALID;
 }
 
+/* Iterator over all temperature sensors.  Start with PT set to NULL */
 struct wrc_temp_sensor *wrc_temp_getnext(struct wrc_temp_sensor *pt)
 {
 	struct wrc_temp_sensor *wt;
@@ -51,12 +46,13 @@ struct wrc_temp_sensor *wrc_temp_getnext(struct wrc_temp_sensor *pt)
 	int i;
 
 	if (!pt) { /* first one */
-		for (i = 0; i < WRC_MAX_TEMPERATURES; i++) {
-			return temp_sensors[i].t;
-		}
+		return temp_sensors[0].t;
 	}
+
+	/* Next sensor in the group */
 	if (pt[1].name)
 		return pt + 1;
+
 	/* get next array, if any */
 	for (i = 0; i < WRC_MAX_TEMPERATURES; i++) {
 		tmp = &temp_sensors[i];
@@ -73,7 +69,8 @@ struct wrc_temp_sensor *wrc_temp_getnext(struct wrc_temp_sensor *pt)
 	return NULL;
 }
 
-extern int wrc_temp_format(char *buffer, int len)
+/* Also used by syslog */
+int wrc_temp_format(char *buffer, int len)
 {
 	struct wrc_temp_sensor *p;
 	int l = 0, i = 0;
@@ -106,13 +103,11 @@ int wrc_temp_register(struct wrc_temp_group *new_temp_sensor)
 
 	for (i = 0; i < WRC_MAX_TEMPERATURES; i++) {
 		struct wrc_temp_group *grp = &temp_sensors[i];
-		if (grp->t) {
-			/* slot used in the list */
-			continue;
+		if (!grp->t) {
+			/* free slot */
+			*grp = *new_temp_sensor;
+			return 1;
 		}
-		*grp = *new_temp_sensor;
-
-		return 1;
 	}
 
 	return 0;
