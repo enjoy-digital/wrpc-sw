@@ -36,7 +36,7 @@ obj-$(CONFIG_EMBEDDED_NODE) += \
 	dev/leds.o \
 	dev/si57x.o \
 	dev/wdiags.o \
-        dev/clock_monitor.o
+	dev/clock_monitor.o
 
 obj-$(CONFIG_WR_NODE) += \
 	dev/sensors.o \
