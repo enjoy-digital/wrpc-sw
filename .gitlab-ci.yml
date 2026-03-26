@@ -10,7 +10,7 @@ variables:
 before_script:
   - apt update && apt upgrade -y
   - DEBIAN_FRONTEND=noninteractive TZ=Europe/Zurich apt -y install tzdata
-  - apt install -y wget git make build-essential libreadline-dev locales
+  - apt install -y wget git make build-essential libreadline-dev locales gcc-arm-none-eabi
   - locale-gen en_US.UTF-8
   - mkdir -p cache/downloads && cd cache/downloads
   - wget -c https://gitlab.com/ohwr/project/wrpc-sw/-/wikis/uploads/9f9224d2249848ed3e854636de9c08dc/riscv-11.2-small.tgz
