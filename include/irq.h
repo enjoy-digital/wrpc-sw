@@ -33,7 +33,7 @@ static inline void init_irq(void) {}
 
 #elif defined(CONFIG_ARCH_ARM_R5)
 
-extern void clear_irq(void);
+static inline void clear_irq(void) {}
 void init_irq(void);
 
 #else

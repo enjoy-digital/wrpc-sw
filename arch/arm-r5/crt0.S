@@ -147,9 +147,12 @@ _boot:
 	mcr     p15, 0, r0, c1, c0, 1       /* Write ACTLR*/
 
 	/* Enable MPU, icache and dcache */
-	mrc 	p15,0,r1,c1,c0,0
+	mrc 	p15,0,r1,c1,c0,0		/* SCTLR */
 	ldr	r0, =0x1005
 	orr 	r1,r1,r0
+	bic	r1,r1,#(1<<25)			/* Clear EE */
+	bic	r1,r1,#(1<<24)			/* Clear VE */
+	bic	r1,r1,#(1<<13)			/* Clear V */
 	dsb
 	mcr	p15,0,r1,c1,c0,0		/* Enable cache  */
 	isb					/* isb	flush prefetch buffer */
@@ -168,15 +171,15 @@ _boot:
 	bl	map_tcm
 #endif
 
-	/* Clear BSS */
+	/* Clear BSS and stacks (to clear ECC) */
 	mov	r0, #0
 
-	ldr	r1,=__bss_start__
-	ldr	r2,=__bss_end__
+	ldr	r2,=__bss_start__
+	ldr	r3,=__stacks_end__
 0:
-	cmp	r1,r2
+	cmp	r2,r3
 	bge	1f
-	str	r0, [r1], #4
+	str	r0, [r2], #4
 	b	0b
 
 1:
@@ -187,13 +190,16 @@ _boot:
 	add r1, r1, #1
 	str r1, [r3]
 
+	/* Wait for init from cpu #0 */
+	bl	_init_sync
+
 	bl	main			/* Jump to main C code */
 
 
 .text
 _irq_handler:
 	stmdb	sp!,{r0-r3,r12,lr}
-	bl	spll_irq_entry			/* IRQ vector */
+	bl	irq_entry			/* IRQ vector */
 	ldmia	sp!,{r0-r3,r12,lr}
 	subs	pc, lr, #4			/* adjust return */
 
