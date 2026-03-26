@@ -230,7 +230,9 @@ int minic_rx_frame(struct wr_minic *nic, struct wr_ethhdr *hdr,
 
 		/* Set if the rising edge counter is in advance compared to
 		   the falling edge counter.
-		   FIXME: why -F_COUNTER_MASK ? */
+		   -F_COUNTER_MASK is for the case where
+		     counter_r = 0 and counter_f = F_COUNTER_MASK.
+		   FIXME: could be simply != 0 ?  */
 		if (cntr_diff == 1 || cntr_diff == (-F_COUNTER_MASK))
 			hwts->ahead = 1;
 		else

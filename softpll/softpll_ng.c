@@ -557,41 +557,42 @@ void spll_show_stats(void)
 
 	if (s->mode != SPLL_MODE_DISABLED)
 	{
-		/* Needs 2 pp_printf to avoid buffer overflow on printf
+		/* Needs several pp_printf to avoid buffer overflow on printf
 		   buffer. */
-	  pp_printf("irqs:%d "
-		    "alignment_state:%d HL%d ML%d HY=%d MY=%d DelCnt=%d setpoint:%d refcnt:%d tagcnt:%d h_kp:%d h_ki:%d h_shift:%d ",
-		    s->irq_count, s->ext.align_state,
-		    s->helper.ld.locked, s->mpll.locked,
-		    s->helper.pi.y, s->mpll.pi.y,
-		    s->delock_count, s->mpll.phase_shift_current,
-		    s->ref_count, s->tag_count,
-		    s->helper.pi.kp,
-		    s->helper.pi.ki,
-		    s->helper.pi.shift);
-	  pp_printf("m_kp:%d m_ki:%d m_shift:%d h_lock_duration:%d m_freq_lock_duration:%d m_phase_lock_duration:%d",
-		    s->mpll.pi.kp,
-		    s->mpll.pi.ki,
-		    s->mpll.pi.shift,
-		    s->helper.last_lock_duration_ms,
-		    s->mpll.last_freq_lock_duration_ms,
-		    s->mpll.last_phase_lock_duration_ms
-		    );
-	  if (0)
-	    pp_printf(" main: en:%d ref:%d out:%d lck:%d freeze:%d",
-		      s->mpll.enabled,
-		      s->mpll.id_ref,
-		      s->mpll.id_out,
-		      s->mpll.locked,
-		      s->mpll.ps_freeze);
+		pp_printf("irqs:%u "
+			  "ext-align:%d MFL%d MPL%d MY:%d DelCnt:%u setp:%d refcnt:%u tagcnt:%u m_kp:%d m_ki:%d m_sh:%d",
+			  s->irq_count, s->ext.align_state,
+			  s->mpll.freq_ld.locked, s->mpll.phase_ld.locked,
+			  s->mpll.pi.y,
+			  s->delock_count, s->mpll.phase_shift_current,
+			  s->ref_count, s->tag_count,
+			  s->mpll.pi.kp,
+			  s->mpll.pi.ki,
+			  s->mpll.pi.shift);
+#ifndef CONFIG_IGNORE_HPLL
+		pp_printf(" HL%d HY=%d h_kp:%d h_ki:%d h_sh:%d",
+			  s->helper.ld.locked, s->helper.pi.y,
+			  s->helper.pi.kp,
+			  s->helper.pi.ki,
+			  s->helper.pi.shift);
+#endif
+		pp_printf(" h_lock_ms:%d m_freq_lock_ms:%d m_phase_lock_ms:%d",
+			  s->helper.last_lock_duration_ms,
+			  s->mpll.last_freq_lock_duration_ms,
+			  s->mpll.last_phase_lock_duration_ms);
+		pp_printf(" main: en:%d ref:%d out:%d lck:%d freeze:%d",
+			  s->mpll.enabled,
+			  s->mpll.id_ref,
+			  s->mpll.id_out,
+			  s->mpll.locked,
+			  s->mpll.vco_freeze);
 
-		if( softpll.mpll.gain_sched )
-		{
-			pp_printf(" gain_sched:%d/%d", softpll.mpll.gain_sched->current_stage + 1, softpll.mpll.gain_sched->n_stages );
-		}
+		if (softpll.mpll.gain_sched)
+			pp_printf(" gain_sched:%d/%d",
+				  softpll.mpll.gain_sched->current_stage + 1,
+				  softpll.mpll.gain_sched->n_stages );
 
 		pp_printf("\n");
-
 	}
 
 	int ch;
