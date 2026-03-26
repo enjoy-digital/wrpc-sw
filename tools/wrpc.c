@@ -89,8 +89,16 @@ struct board {
 	int (*init)(struct board *board, int *argc, char *argv[]);
 	int (*fini)(struct board *board);
 	void (*help)(void);
+
+	/* Read/Write to the ptp core register at OFF */
 	uint32_t (*readl)(struct board *board, unsigned off);
 	void (*writel)(struct board *board, unsigned off, uint32_t v);
+
+	/* Map 4KB of the local bus at address ADDR, for ZynqUS+ only.
+	   The previous map (if present) is invalidated.
+	   TODO: handle multiple map ?  handle other processor ?  */
+	void *(*map)(struct board *board, unsigned addr);
+	void (*unmap)(struct board *board);
 };
 
 static struct board *board;
@@ -115,6 +123,7 @@ struct board_mem {
 	struct board parent;
 	volatile void *base;
 	int is_be;
+	/* Virtual address of the PTP core */
 	void *map_addr;
 	unsigned map_length;
 };
@@ -180,31 +189,43 @@ static int parse_pci_slot(struct pci_slot *res, const char *s)
 	return 0;
 }
 
-static int board_pci_common_open(struct board_pci *board)
+static void *pci_map_resource(const char *resource_file,
+			      unsigned off, unsigned len)
 {
 	int fd;
+	void *res;
+
+	fd = open(resource_file, O_RDWR | O_SYNC);
+	if (fd < 0) {
+		fprintf(stderr, "cannot open resource file '%s': %s\n",
+			resource_file, strerror(errno));
+		return NULL;
+	}
+
+	res = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, off);
+	if (res == MAP_FAILED) {
+		fprintf(stderr, "cannot map resource file '%s': %s\n",
+			resource_file, strerror(errno));
+		close(fd);
+		return NULL;
+	}
+	close(fd);
+
+	return res;
+}
+
+static int board_pci_common_open(struct board_pci *board)
+{
 	unsigned pg = getpagesize();
 	unsigned pa_offset;
 
-	fd = open(board->resource_file, O_RDWR | O_SYNC);
-	if (fd < 0) {
-		fprintf(stderr, "cannot open resource file '%s': %s\n",
-			board->resource_file, strerror(errno));
-		return -1;
-	}
-
 	/* offset is page aligned */
 	pa_offset = board->offset & ~(pg - 1);
-	board->parent.map_addr = mmap(NULL, map_size,
-			   PROT_READ | PROT_WRITE,
-			   MAP_SHARED, fd, pa_offset);
-	if (board->parent.map_addr == MAP_FAILED) {
-		fprintf(stderr, "cannot map resource file '%s': %s\n",
-			board->resource_file, strerror(errno));
-		close(fd);
+
+	board->parent.map_addr =
+		pci_map_resource(board->resource_file, pa_offset, map_size);
+	if (board->parent.map_addr == NULL)
 		return -1;
-	}
-	close(fd);
 
 	board->parent.map_length = map_size;
 	board->parent.base =
@@ -637,17 +658,15 @@ struct board_cernvme {
         struct vme_mapping map;
 };
 
-static int cernvme_map(struct board_cernvme *board,
-                       unsigned am, unsigned dw,
-                       unsigned vme_addr, unsigned offset)
+static int cernvme_map_wrpc(struct board_cernvme *board)
 {
         unsigned pg = getpagesize();
 
         memset(&board->map, 0, sizeof(struct vme_mapping));
-        board->map.am = am;
-        board->map.data_width = dw;
+        board->map.am = board->am;
+        board->map.data_width = board->data_width;
         board->map.sizel = map_size;
-        board->map.vme_addrl = vme_addr | (offset & ~(pg - 1));
+        board->map.vme_addrl = board->addr | (board->offset & ~(pg - 1));
 
         board->parent.map_addr = vme_map(&board->map, 1);
         if (!board->parent.map_addr) {
@@ -655,7 +674,7 @@ static int cernvme_map(struct board_cernvme *board,
                 return -1;
         }
         board->parent.map_length = map_size;
-	board->parent.base = board->parent.map_addr + (offset & (pg - 1));
+	board->parent.base = board->parent.map_addr + (board->offset & (pg - 1));
 
         board->parent.is_be = 1;
 
@@ -718,15 +737,18 @@ static unsigned cernvme_slot_to_addr(unsigned slot, unsigned verbose)
 	return res;
 }
 
+static void board_cernvme_default(struct board_cernvme *board)
+{
+	board->offset = 0;
+	board->data_width = 32;
+	board->am = 0x39;
+	board->addr = ~0;
+}
+
 static int board_cernvme_init_common(struct board *board_base,
 				     int *argc, char *argv[])
 {
 	struct board_cernvme *board = (struct board_cernvme *)board_base;
-	unsigned verbose = 0;
-        unsigned vme_addr = ~0;
-        unsigned data_width = 32;
-        unsigned am = 0x39;
-        unsigned offset = 0;
 
         while (*argc > 2) {
                 if (argv[1][0] != '-')
@@ -739,7 +761,7 @@ static int board_cernvme_init_common(struct board *board_base,
                 else if (!strcmp(argv[1], "-a") || !strcmp(argv[1], "--address")) {
                         char *e;
                         remove_arg1(argc, argv);
-                        vme_addr = strtoul(argv[1], &e, 0);
+                        board->addr = strtoul(argv[1], &e, 0);
                         if (*e != 0) {
                                 fprintf(stderr, "invalid address '%s'\n", argv[1]);
                                 return -1;
@@ -756,8 +778,8 @@ static int board_cernvme_init_common(struct board *board_base,
                                 fprintf(stderr, "invalid slot '%s'\n", argv[1]);
                                 return -1;
                         }
-			vme_addr = cernvme_slot_to_addr(slot, verbose);
-			if (!vme_addr) {
+			board->addr = cernvme_slot_to_addr(slot, verbose);
+			if (!board->addr) {
 				fprintf(stderr, "cannot find address for slot %u\n", slot);
 				return -1;
 			}
@@ -768,16 +790,16 @@ static int board_cernvme_init_common(struct board *board_base,
                         char *e;
 
                         remove_arg1(argc, argv);
-                        data_width = strtoul(argv[1], &e, 0);
+                        board->data_width = strtoul(argv[1], &e, 0);
                         if (*e != 0) {
                                 fprintf(stderr, "invalid data-width '%s'\n", argv[1]);
                                 return -1;
                         }
-                        if (!(data_width == 8
-                              || data_width == 16
-                              || data_width == 32)) {
+                        if (!(board->data_width == 8
+                              || board->data_width == 16
+                              || board->data_width == 32)) {
                                 fprintf(stderr, "invalid data-width %u\n",
-                                        data_width);
+                                        board->data_width);
                                 return -1;
                         }
                         remove_arg1(argc, argv);
@@ -787,7 +809,7 @@ static int board_cernvme_init_common(struct board *board_base,
                         char *e;
 
                         remove_arg1(argc, argv);
-                        am = strtoul(argv[1], &e, 0);
+                        board->am = strtoul(argv[1], &e, 0);
                         if (*e != 0) {
                                 fprintf(stderr, "invalid address-modifier '%s'\n", argv[1]);
                                 return -1;
@@ -798,7 +820,7 @@ static int board_cernvme_init_common(struct board *board_base,
                          || !strcmp(argv[1], "--offset")) {
                         char *e;
                         remove_arg1(argc, argv);
-                        offset = strtoul(argv[1], &e, 0);
+                        board->offset = strtoul(argv[1], &e, 0);
                         if (*e != 0) {
                                 fprintf (stderr, "bad offset '%s'\n", argv[1]);
                                 return -1;
@@ -812,21 +834,23 @@ static int board_cernvme_init_common(struct board *board_base,
 
         }
 
-        if (vme_addr == ~0) {
+        if (board->addr == ~0) {
                 fprintf (stderr,
                          "vme address (-a) or vme slot (-s) required\n");
                 return -1;
         }
 
-        return cernvme_map (board, am, data_width, vme_addr, offset);
+        return cernvme_map_wrpc (board);
 }
 
 static int board_cernvme_init(struct board *board_base,
                               int *argc, char *argv[])
 {
 	struct board_cernvme *board = (struct board_cernvme *)board_base;
+	int res;
 
-	int res = board_cernvme_init_common(board_base, argc, argv);
+	board_cernvme_default(board);
+	res = board_cernvme_init_common(board_base, argc, argv);
 	if (res < 0)
 		return res;
 
@@ -861,7 +885,9 @@ static void board_cernvme_help(void)
 
 static struct board_cernvme board_cernvme =
 {
+	/* board_mem */
 	{
+		/* board */
 		{
 			"vme",
 			board_cernvme_init,
@@ -881,8 +907,10 @@ static int board_cernvme_le_init(struct board *board_base,
 				  int *argc, char *argv[])
 {
 	struct board_cernvme *board = (struct board_cernvme *)board_base;
+	int res;
 
-	int res = board_cernvme_init_common(board_base, argc, argv);
+	board_cernvme_default(board);
+	res = board_cernvme_init_common(board_base, argc, argv);
 	if (res < 0)
 		return res;
 
@@ -905,7 +933,92 @@ static struct board_cernvme board_cernvme_le =
 			board_cernvme_fini,
 			board_cernvme_le_help,
 			mem_readl,
-			mem_writel
+			mem_writel,
+			NULL
+		},
+		NULL,
+		0,
+		NULL,
+		0
+	},
+};
+
+static int wren_vme_init(struct board *board_base,
+			 int *argc, char *argv[])
+{
+	struct board_cernvme *board = (struct board_cernvme *)board_base;
+	int res;
+
+	board_cernvme_default(board);
+	board->offset = 0x1000;
+
+	res = board_cernvme_init_common(board_base, argc, argv);
+	if (res < 0)
+		return res;
+
+	board->parent.is_be = 0;
+	return 0;
+}
+
+static void *wren_vme_map(struct board *base_board, unsigned addr)
+{
+	/* Map the page with windows */
+	struct board_cernvme *board = (struct board_cernvme *)base_board;
+	struct vme_mapping vmap;
+	uint32_t *vme_win;
+	void *res;
+
+        memset(&vmap, 0, sizeof(struct vme_mapping));
+        vmap.am = board->map.am;
+        vmap.data_width = board->map.data_width;
+        vmap.sizel = 4096;
+        vmap.vme_addrl = board->addr | 0x2000;
+
+        vme_win = vme_map(&vmap, 1);
+        if (!vme_win) {
+                fprintf(stderr, "cannot map vme: %s\n", strerror(errno));
+                return NULL;
+        }
+
+	for (unsigned i = 0; i < 8; i++)
+		printf ("wren vme window %u: %08x\n",
+			i, (unsigned)vme_win[(0x200 >> 2) + i]);
+
+	/* Set window */
+	vme_win[(0x200 >> 2) + 6] = addr;
+
+	vme_unmap(&vmap, 0);
+
+	/* Map the window */
+
+        memset(&vmap, 0, sizeof(struct vme_mapping));
+        vmap.am = board->map.am;
+        vmap.data_width = board->map.data_width;
+        vmap.sizel = 4096;
+        vmap.vme_addrl = board->addr | 0x8000 | (0x1000 * 6);
+
+        res = vme_map(&vmap, 1);
+        if (!res) {
+                fprintf(stderr, "cannot map vme: %s\n", strerror(errno));
+                return NULL;
+        }
+
+	return res;
+}
+
+static struct board_cernvme board_wren_vme =
+{
+	/* board_mem */
+	{
+		/* board */
+		{
+			"wren-vme",
+			wren_vme_init,
+			board_cernvme_fini,
+			board_cernvme_le_help,
+			mem_readl,
+			mem_writel,
+			wren_vme_map
 		},
 		NULL,
 		0,
@@ -964,7 +1077,12 @@ static int board_wr2rf_init(struct board *board_base,
                 return -1;
         }
 
-        return cernvme_map(board, 0x39, 16, vme_addr, 0x2000);
+	board->am = 0x39;
+	board->data_width = 16;
+	board->addr = vme_addr;
+	board->offset = 0x2000;
+
+        return cernvme_map_wrpc(board);
 }
 
 static void board_wr2rf_help(void)
@@ -992,6 +1110,150 @@ static struct board_cernvme board_wr2rf =
 };
 #endif
 
+struct board_wren_pcie {
+	struct board_mem parent;
+	struct pci_slot slot;
+
+	/* For map/unmap */
+	void *soc_addr;
+};
+
+static int board_wren_pcie_init(struct board *board_base,
+				int *argc, char *argv[])
+{
+	struct board_wren_pcie *board = (struct board_wren_pcie *)board_base;
+	char pcie_file[64];
+
+	if (*argc > 2 && !strcmp(argv[1], "-s")) {
+		remove_arg1(argc, argv);
+		if (parse_pci_slot(&board->slot, argv[1]) < 0)
+			return -1;
+		remove_arg1(argc, argv);
+	}
+	else {
+		fprintf(stderr, "missing '-s [dom:]bus:slot[.fn][@bar]' for wren-pcie\n");
+		return -1;
+	}
+
+	board->slot.bar = 1;
+
+	snprintf (pcie_file, sizeof(pcie_file),
+		  "/sys/bus/pci/devices/%04x:%02x:%02x.%x/resource%u",
+		  board->slot.domain, board->slot.bus,
+		  board->slot.slot, board->slot.func,
+		  board->slot.bar);
+
+	board->parent.map_addr = pci_map_resource(pcie_file, 0x1000, map_size);
+	if (board->parent.map_addr == NULL)
+		return -1;
+	board->parent.base = board->parent.map_addr;
+	board->parent.is_be = 0; /* default set to little endian */
+
+	return 0;
+}
+
+struct xpcie_ingress {
+  uint32_t capabilities;
+  uint32_t status;
+  uint32_t control;
+  uint32_t pad_0c;
+
+  uint32_t src_base_lo;
+  uint32_t src_base_hi;
+  uint32_t dst_base_lo;
+  uint32_t dst_base_hi;
+};
+
+static void board_wren_pcie_unmap(struct board *base_board)
+{
+	struct board_wren_pcie *board = (struct board_wren_pcie *)base_board;
+
+	if (board->soc_addr) {
+		munmap(board->soc_addr, 0x1000);
+		board->soc_addr = NULL;
+	}
+}
+
+static void *board_wren_pcie_map(struct board *base_board, unsigned addr)
+{
+	char pcie_file[64];
+	struct board_wren_pcie *board = (struct board_wren_pcie *)base_board;
+	void *ingress_base;
+	struct xpcie_ingress *ing;
+
+	board_wren_pcie_unmap(base_board);
+
+	/* Map xpcie bar (bar 0) to change ingress registers */
+	snprintf (pcie_file, sizeof(pcie_file),
+		  "/sys/bus/pci/devices/%04x:%02x:%02x.%x/resource%u",
+		  board->slot.domain, board->slot.bus,
+		  board->slot.slot, board->slot.func, 0);
+
+	ingress_base = pci_map_resource(pcie_file, 0x8000, 0x1000);
+
+	ing = ingress_base + 0x800;
+
+	if (0) {
+		for (unsigned i = 0; i < 8; i++) {
+			printf ("ing %u: %08x %08x -> %08x %08x, ctrl: %08x (size: %uKB)\n", i,
+				ing[i].src_base_hi, ing[i].src_base_lo,
+				ing[i].dst_base_hi, ing[i].dst_base_lo,
+				ing[i].control,
+				(4 << ((ing[i].control >> 16) & 0x1f)));
+		}
+	}
+
+	/* Modify ingress #3 used by bar 2 (was OCM) */
+	ing[3].control = 0;
+	ing[3].dst_base_hi = 0;
+	ing[3].dst_base_lo = addr;
+	ing[3].control = 1;
+
+	munmap(ingress_base, 0x1000);
+
+	/* And now map bar2 */
+	snprintf (pcie_file, sizeof(pcie_file),
+		  "/sys/bus/pci/devices/%04x:%02x:%02x.%x/resource%u",
+		  board->slot.domain, board->slot.bus,
+		  board->slot.slot, board->slot.func, 2);
+
+	board->soc_addr = pci_map_resource(pcie_file, 0, 0x1000);
+	return board->soc_addr;
+}
+
+static int board_wren_pcie_fini(struct board *base_board)
+{
+	struct board_wren_pcie *board = (struct board_wren_pcie *)base_board;
+	munmap(board->parent.map_addr, board->parent.map_length);
+
+	return 0;
+}
+
+static void board_wren_pcie_help(void)
+{
+        printf("WREN-pcie board\n");
+        printf(" -s [domain:]bus:slot[.func]\n");
+}
+
+static struct board_pci board_wren_pcie =
+{
+	/* board_mem */
+	{
+		/* board */
+		{
+			"wren-pcie",
+			board_wren_pcie_init,
+			board_wren_pcie_fini,
+			board_wren_pcie_help,
+			mem_readl,
+			mem_writel,
+			board_wren_pcie_map,
+			board_wren_pcie_unmap
+		},
+		NULL, 0, NULL, 0
+	},
+};
+
 static struct board *boards[] = {
 	&board_pci.parent.parent,
 	&board_spec.parent.parent,
@@ -1002,8 +1264,10 @@ static struct board *boards[] = {
 #ifdef SUPPORT_CERN_VMEBRIDGE
 	&board_cernvme.parent.parent,
 	&board_cernvme_le.parent.parent,
+	&board_wren_vme.parent.parent,
 	&board_wr2rf.parent.parent,
 #endif
+	&board_wren_pcie.parent.parent,
 #ifdef SUPPORT_WRS
         &board_wrs.parent.parent,
 #endif
