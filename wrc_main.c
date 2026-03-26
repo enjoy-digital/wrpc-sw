@@ -43,6 +43,7 @@
 #include "dev/w1.h"
 #include "dev/temp-fake.h"
 #include "dev/temp-w1.h"
+#include "dev/zynqus/temp-sysmon.h"
 #include "dev/temperature.h"
 #include "sensors.h"
 #include "tasks.h"
@@ -134,6 +135,9 @@ static void wrc_initialize(void)
 	if (HAS_TEMP_SENSORS && HAS_TEMP_FAKE)
 		temp_faketemp_init();
 
+#ifdef CONFIG_ZYNQUS_TEMP
+	temp_zynqus_sysmon_init();
+#endif
 
 #if defined CONFIG_AUX_TIMING_EN
 

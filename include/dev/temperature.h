@@ -34,7 +34,7 @@ struct wrc_temp_group {
 };
 
 /* lib functions  */
-extern uint32_t wrc_temp_get(char *name);
+extern int32_t wrc_temp_get(const char *name);
 struct wrc_temp_sensor *wrc_temp_getnext(struct wrc_temp_sensor *);
 extern int wrc_temp_format(char *buffer, int len);
 void wrc_temp_init(void);

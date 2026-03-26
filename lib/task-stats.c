@@ -138,11 +138,15 @@ int wrc_log_stats(void)
 		spll_get_dac(1));
 
 	if (HAS_TEMP_SENSORS) {
-		int32_t temp;
+		struct wrc_temp_sensor *ts;
 
-		temp = wrc_temp_get("pcb");
-		pp_printf("temp:%d.%04d C", (int) (temp >> 16),
-			  (int) ((temp & 0xffff) * 10 * 1000 >> 16));
+		/* Use the first sensor */
+		ts = wrc_temp_getnext(NULL);
+		if (ts) {
+			int32_t temp = ts->t;
+			pp_printf("temp:%d.%02d", (int) (temp >> 16),
+				  (int) ((temp & 0xffff) * 100 >> 16));
+		}
 	}
 
 	pp_printf("\n");
