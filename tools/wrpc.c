@@ -81,7 +81,7 @@ struct tool_base {
 	const char *name;
         const char *short_help;
 	int (*run)(int argc, char *argv[]);
-	void (*help)(void);
+	void (*help)(const char *cmd);
 };
 
 struct board {
@@ -1746,7 +1746,7 @@ static int do_help(int argc, char *argv[])
 			if (tool->help == NULL)
 				printf("%s\n", tool->short_help);
 			else
-				tool->help();
+				tool->help(tool->name);
 		}
 	}
 	return 0;
@@ -1758,7 +1758,7 @@ static int do_version(int argc, char *argv[])
 	return 0;
 }
 
-static void help_load(void)
+static void help_load(const char *cmd)
 {
         printf("usage: %s load [-c CORE] BOARD-OPTIONS FILENAME\n", progname);
         printf("Load FILENAME into WR cpu and restart the code\n");
@@ -1829,7 +1829,7 @@ static int do_load(int argc, char *argv[])
 
 	if (((cmd == CMD_LOAD || cmd == CMD_SAVE) && (optind != argc - 1))
 	    || (cmd == CMD_DUMP && optind != argc)) {
-		help_load();
+		help_load(NULL);
 		return 2;
 	}
 	filename = argv[optind];
@@ -1873,7 +1873,7 @@ static int do_load(int argc, char *argv[])
 	return status;
 }
 
-static void help_vuart(void)
+static void help_vuart(const char *cmd)
 {
 	fprintf(stderr, "usage: %s vuart BOARD-OPTIONS [-k] [-c <cmd>] [-r] [-t <timeout>]\n", progname);
 	fprintf(stderr, " -k keep terminal\n");
@@ -2260,7 +2260,7 @@ static int do_vuart(int argc, char *argv[])
 
 #ifndef SUPPORT_WRS
 
-static void help_info(void)
+static void help_info(const char *cmd)
 {
 	printf("usage: %s info\n", progname);
 	printf("display board info\n"
@@ -2296,7 +2296,7 @@ static int do_info(int argc, char *argv[])
 	return 0;
 }
 
-static void help_mac(void)
+static void help_mac(const char *cmd)
 {
 	printf("usage: %s mac\n", progname);
 	printf("display mac address\n");
@@ -2343,7 +2343,7 @@ static int do_board(int argc, char *argv[])
         return 0;
 }
 
-static void help_spll_recorder(void)
+static void help_spll_recorder(const char *cmd)
 {
 	fprintf(stderr, "SoftPLL debug/recorder tool. \n");
 	fprintf(stderr, "This dumps the real-time SPLL traces (error values/DAC drive/events) into stdout for the purpose of further analysis/plotting. \n");
@@ -2637,7 +2637,7 @@ static int do_spll_recorder(int argc, char *argv[])
 			undersample = atoi(optarg);
 			break;
 		case 'h':
-			help_spll_recorder();
+			help_spll_recorder(NULL);
 			break;
 		case 'd':
 			debug = 1;
@@ -2673,7 +2673,7 @@ static int do_spll_recorder(int argc, char *argv[])
 	return 0;
 }
 
-static void help_spll_display(void)
+static void help_spll_display(const char *cmd)
 {
 	fprintf(stderr, "SoftPLL log display.\n");
 	fprintf(stderr, "This reads binary dumps from spll-recorder -b\n");
@@ -4027,10 +4027,10 @@ out_sock:
         return ret_exit;
 }
 
-static void help_gdbserver(void)
+static void help_gdbserver(const char *cmd)
 {
-	fprintf(stderr, "usage: %s gdbserver BOARD-OPTIONS [options]\n",
-		progname);
+	fprintf(stderr, "usage: %s %s BOARD-OPTIONS [options]\n",
+		progname, cmd);
 	fprintf(stderr, " -p PORT       listen on tcp port PORT\n");
 	fprintf(stderr, " -v            verbose\n");
 	fprintf(stderr, " -t            enable terminal\n");
@@ -4064,7 +4064,7 @@ static int do_gdbserver(int argc, char *argv[])
 
 #ifndef SUPPORT_WRS
 
-static void help_wdiags(void)
+static void help_wdiags(const char *cmd)
 {
 	printf("usage: %s wdiags\n", progname);
 	printf("display diagnostic registers\n");
@@ -4325,7 +4325,7 @@ static int do_wdiags(int argc, char *argv[])
 	return 0;
 }
 
-static void help_aux_logger(void)
+static void help_aux_logger(const char *cmd)
 {
 	printf("usage: %s aux-logger\n", progname);
 }
@@ -6714,7 +6714,7 @@ static const struct tool_base tool_spll_display = {
 
 static const struct tool_base tool_gdbserver = {
         "gdbserver",
-        "risc-v gdb-sever",
+        "risc-v gdb-server",
         do_gdbserver,
         help_gdbserver
 };
@@ -6877,7 +6877,7 @@ int main(int argc, char *argv[])
 	if (argc > 1)
 		if (strcmp (argv[1], "-h") == 0
 		    || strcmp (argv[1], "--help") == 0) {
-			tool->help();
+			tool->help(tool->name);
 			return 0;
 		}
 
