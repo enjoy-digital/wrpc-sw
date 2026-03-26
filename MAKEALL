@@ -56,12 +56,12 @@ for c in $configs; do
     DEFCONFIG_NAME=$c
     export DEFCONFIG_NAME
     # Remove "# configuration written to .config" from output
-    make -s | grep -v '^#'
+    make | grep -v '^#'
     if [ x"$compare_mode" = x"y" ]; then
 	make makeall_copy
     fi
     output_name=`make -s output_name`
-    if ! [ -f "$output_name".bin ]; then
+    if ! [ -f "$output_name".elf ]; then
 	FAILED_LIST="$FAILED_LIST $c "
     fi
 done
