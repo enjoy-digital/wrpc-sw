@@ -656,6 +656,15 @@ config CMD_PTP_ADV
 	  --accuracy (clock accuracy)
 	  --allan (clock allan variance)
 
+config CMD_PTP_RT
+	depends on WRPC_PPSI
+	boolean "Extend 'ptp' command with runtime reconfiguration possibility"
+	default n
+	help
+	  Extend ptp command with extra subcommands:
+	  --egress
+	  --ingress
+
 config CMD_NETCONSOLE
 	depends on NETCONSOLE
 	boolean "Add 'netconsole' command to configure netconsole"
@@ -878,7 +887,7 @@ config VERBOSE_DETAIL
        bool "Display meaning of each digit for the 'verbose' command"
 
 config LTO
-	bool
+	bool "Enable LTO (link time optimization) to reduce binary size"
 	default n if TARGET_WR_SWITCH
 	default y if ARCH_RISCV
 	default n
