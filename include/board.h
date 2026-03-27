@@ -18,8 +18,8 @@
     #define DEV_BASE	0x40000
 #elif defined CONFIG_ARCH_ARM_R5
     /* Very board specific */
-    #define DEV_BASE	0x80003000
-    #define BASE_AUXWB	0x80004000
+    #define DEV_BASE	0x80400000
+    #define BASE_AUXWB	0x80408000
 #else
     #error Wrong CPU architecture. Must define either LM32 or RISC-V.
 #endif
