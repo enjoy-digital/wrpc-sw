@@ -14,6 +14,7 @@
 #include "shell.h"
 #include "dev/syscon.h"
 #include "dev/endpoint.h"
+#include "hw/endpoint_regs.h"
 #include "hw/ep_mdio_regs.h"
 #include "hw/lpdc_mdio_regs.h"
 #include "cmds.h"
@@ -36,6 +37,7 @@ static const char * const ep_cmds[] =
 	 [0] = "link",
 	 [1] = "rd",
 	 [2] = "autoneg",
+	 [3] = "stat",
 };
 
 int cmd_ep(const char *args[])
@@ -75,6 +77,13 @@ int cmd_ep(const char *args[])
 			mcr |= EP_MDIO_MCR_ANENABLE;
 		}
 		ep_pcs_write(dev, EP_MDIO_MCR, mcr);
+		return 0;
+	}
+	case 3: {
+		uint32_t dsr = ep_read(dev, EP_REG_DSR);
+		pp_printf("ready:   %u\n", (dsr & EP_DSR_GTREADY));
+		pp_printf("rx sync: %u\n", (dsr & EP_DSR_RXSYNC));
+		pp_printf("link ok: %u\n", (dsr & EP_DSR_LSTATUS));
 		return 0;
 	}
 	default:
