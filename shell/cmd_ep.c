@@ -35,6 +35,7 @@ static const char * const ep_cmds[] =
 {
 	 [0] = "link",
 	 [1] = "rd",
+	 [2] = "autoneg",
 };
 
 int cmd_ep(const char *args[])
@@ -46,10 +47,11 @@ int cmd_ep(const char *args[])
 
 	switch (icmd) {
 	case 0:
+		/* "link" status */
 		pp_printf("%d\n", ep_link_up(dev, NULL));
 		return 0;
-	case 1:
-	{
+	case 1:	{
+		/* "rd" read a register */
 		const struct reg_desc *r;
 		for (r = regs; r->name; r++)
 			if (!strcmp(r->name, args[1]))
@@ -58,6 +60,21 @@ int cmd_ep(const char *args[])
 			return -1;
 		pp_printf("%s (@%x): %04x\n",
 			  r->name, r->addr, ep_pcs_read(dev, r->addr));
+		return 0;
+	}
+	case 2: {
+		/* "autoneg" */
+		unsigned mcr = ep_pcs_read(dev, EP_MDIO_MCR);
+		if (!strcmp("restart", args[1])) {
+			mcr |= EP_MDIO_MCR_ANRESTART;
+		}
+		else if (!strcmp("off", args[1])) {
+			mcr &= ~EP_MDIO_MCR_ANENABLE;
+		}
+		else if (!strcmp("on", args[1])) {
+			mcr |= EP_MDIO_MCR_ANENABLE;
+		}
+		ep_pcs_write(dev, EP_MDIO_MCR, mcr);
 		return 0;
 	}
 	default:
