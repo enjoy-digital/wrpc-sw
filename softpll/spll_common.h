@@ -65,7 +65,7 @@ void pi_init(spll_pi_t *pi);
 int pi_update(spll_pi_t *pi, int x);
 
 void ld_init(spll_lock_det_t *ld);
-int ld_update(spll_lock_det_t *ld, int y);
+void ld_update(spll_lock_det_t *ld, int y);
 
 void spll_enable_tagger(int channel, int enable);
 
