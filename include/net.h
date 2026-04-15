@@ -35,6 +35,8 @@ struct wr_sockaddr {
 };
 
 struct sockq {
+	/* Socket RX buffer.  Data is pushed at head and extracted from tail.
+	   SIZE is the size of the buffer. */
 	uint16_t head, tail, avail, size;
 	uint16_t n;
 	uint8_t buff[];

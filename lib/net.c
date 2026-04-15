@@ -162,6 +162,10 @@ static void ptpd_netif_linearize_rx_timestamp(struct wr_timestamp *ts,
 
 }
 
+/* Extract data from socket buffer Q.
+   LEN is the number of bytes to be extracted while BUFLEN is the destination
+   size (if not 0).
+   If LEN > BUFLEN, the extra bytes are discarded. */
 /* Slow, but we don't care much... */
 static int wrap_copy_in(void *dst, struct sockq *q, size_t len, size_t buflen)
 {
@@ -187,6 +191,7 @@ static int wrap_copy_in(void *dst, struct sockq *q, size_t len, size_t buflen)
 	return len;
 }
 
+/* Put LEN byte from SRC to socket buffer Q.  Return LEN */
 static int wrap_copy_out(struct sockq *q, void *src, size_t len)
 {
 	char *sptr = src;
