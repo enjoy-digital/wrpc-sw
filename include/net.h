@@ -47,6 +47,12 @@ struct wrpc_socket {
 	struct wrc_netif_device *nif;
 	uint16_t prio;
 
+#ifdef CONFIG_CMD_IP_STAT
+	unsigned rx_pkts;
+	unsigned tx_pkts;
+#endif
+
+	/* Queue for RX packets */
 	struct sockq queue;
 };
 
@@ -111,4 +117,7 @@ int ptpd_netif_recvfrom(struct wrpc_socket *sock, struct wr_sockaddr *from, void
 // Closes the socket.
 int ptpd_netif_close_socket(struct wrpc_socket *sock);
 
+#ifdef CONFIG_CMD_IP_STAT
+struct wrpc_socket *net_get_sock(unsigned i);
+#endif
 #endif /* __PTPD_NETIF_H */

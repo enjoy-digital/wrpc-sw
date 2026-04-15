@@ -29,6 +29,13 @@
 
 static struct wrpc_socket *socks[NET_MAX_SOCKETS];
 
+#ifdef CONFIG_CMD_IP_STAT
+struct wrpc_socket *net_get_sock(unsigned i)
+{
+	return socks[i];
+}
+#endif
+
 void copy_eth_addr(mac_addr_t dest, const mac_addr_t src)
 {
 	memcpy (dest, src, ETH_ALEN);
@@ -283,6 +290,10 @@ int ptpd_netif_sendto(struct wrpc_socket *sock, struct wr_sockaddr *to,
 		    sock->bind_addr.udpport,
 		    data_length);
 
+#ifdef CONFIG_CMD_IP_STAT
+	sock->tx_pkts++;
+#endif
+
 	rval = minic_tx_frame(sock->nif->nic, &hdr, (uint8_t *) data, data_length, &hwts);
 
 	if (tx_timestamp) {
@@ -352,8 +363,15 @@ static int netif_poll(struct wrc_netif_device *nif)
 	if (!s) {
 		net_verbose("%s: could not find socket for packet\n",
 			   __FUNCTION__);
+#ifdef CONFIG_CMD_IP_STAT
+		nif->nic->rx_unmatch++;
+#endif
 		return 1;
 	}
+
+#ifdef CONFIG_CMD_IP_STAT
+	s->rx_pkts++;
+#endif
 
 	q = &s->queue;
 	q_required =

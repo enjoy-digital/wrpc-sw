@@ -715,6 +715,11 @@ config CMD_AUXTMG
 	help
 	  This enables auxtmg command, which can be used to configure and read status of auxiliary timing outputs (UTC, NMEA, IRIG-B).
 
+config CMD_IP_STAT
+       depends on IP
+       boolean "Add 'ip stat' command to display stats"
+       default n
+
 comment "wrpc-sw is tainted if you change the following options"
 config DEVELOPER
 	depends on WR_NODE

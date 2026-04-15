@@ -11,11 +11,13 @@
 #include <errno.h>
 #include "wrc.h"
 #include "lib/ipv4.h"
+#include "dev/netif.h"
 #include "wrc_global.h"
 
 #include "softpll_ng.h"
 #include "shell.h"
 #include "dev/etherbone.h"
+#include "endianness.h"
 #include "cmds.h"
 
 void decode_ip(const char *str, unsigned char *ip)
@@ -38,6 +40,36 @@ char *format_ip(char *s, const unsigned char *ip)
 	return s;
 }
 
+#ifdef CONFIG_CMD_IP_STAT
+static void cmd_ip_stat(void)
+{
+	unsigned i;
+
+	for (i = 0; i < NET_MAX_SOCKETS; i++) {
+		struct wrpc_socket *s = net_get_sock(i);
+		unsigned ethtyp;
+
+		if (s == NULL)
+			continue;
+		ethtyp = s->bind_addr.ethertype;
+		if (ethtyp == htons(0x0800))
+			pp_printf("udp %-5u ", s->bind_addr.udpport);
+		else
+			pp_printf("eth %04x  ", ntohs(ethtyp));
+		pp_printf(" rx: %-9u  tx: %-9u\n", s->rx_pkts, s->tx_pkts);
+	}
+
+	for (i = 0; i < netif_get_device_count(); i++) {
+		struct wrc_netif_device *nif = netif_get_device(i);
+		struct wr_minic *nic = nif->nic;
+
+		pp_printf ("if %u       rx: %-9u  tx: %-9u  err: %-9u  unmatch: %-9u\n",
+			   i, nic->rx_count, nic->tx_count, nic->rx_errors,
+			   nic->rx_unmatch);
+	}
+}
+#endif
+
 int cmd_ip(const char *args[])
 {
 	unsigned char ip[4];
@@ -51,6 +83,11 @@ int cmd_ip(const char *args[])
 		setIP(ip);
 #if HAS_EB
 		eb_setIP(ip);
+#endif
+#ifdef CONFIG_CMD_IP_STAT
+	} else if (!strcmp(args[0], "stat")) {
+		cmd_ip_stat();
+		return 0;
 #endif
 	} else {
 		return -EINVAL;

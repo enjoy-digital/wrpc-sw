@@ -38,6 +38,9 @@ struct wr_ethhdr_vlan {
 struct wr_minic {
     void *base;
     unsigned tx_count, rx_count, rx_errors;
+#ifdef CONFIG_CMD_IP_STAT
+    unsigned rx_unmatch;
+#endif
 };
 
 struct hw_timestamp {
