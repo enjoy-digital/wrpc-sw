@@ -578,7 +578,7 @@ config HAS_FLASH_INIT
 	default 0
 
 config FLASH_INIT
-	boolean
+	boolean "Read init commands from flash storage"
 	default y if EMBEDDED_NODE
 	default n
 
@@ -865,11 +865,6 @@ config DAC_LOG
 	  If you want to see the dac output, input to the VCXO main
 	  oscillator, enable this. You'll have a "daclog" shell command
 	  to set ipaddress and mac of the target host. UDP port is 1050.
-
-config FLASH_INIT
-	depends on DEVELOPER && EMBEDDED_NODE
-	default y
-	boolean "Read init commands from flash storage"
 
 # CHECK_RESET for switch and node
 config CHECK_RESET
