@@ -237,10 +237,10 @@ config IPMI_CONSOLE
 	default y
 
 config IP
-	depends on WR_NODE && !WR_NIC_CPU
+	depends on WR_NODE
 	boolean "Compile minimal IP support in wrpc-sw"
 	help
-	  This allows to run LM32 code that is aware of IP. The feature is
+	  This allows to run code that is aware of IP. The feature is
 	  needed to run Etherbone in your gateware, because Etherbone
 	  is UDP-based and thus the CPU needs to run DHCP.
 
