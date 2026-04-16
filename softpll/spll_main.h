@@ -28,7 +28,6 @@ struct spll_main_state {
 	int div_fb;
 	int div_ref;
 	int div_interp;
-	int n_ref, n_out;
 
 	int tag_out_raw_d, tag_out_raw;
 	int tag_out_interp;

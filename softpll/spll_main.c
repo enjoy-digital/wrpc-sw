@@ -220,7 +220,6 @@ void mpll_start(struct spll_main_state *s)
 	s->tag_out_raw_d = -1;
 	s->tag_out_interp = -1;
 	s->tag_out_raw = -1;
-	s->n_ref = s->n_out = 0;
 	s->div_cnt = 0;
 #endif
 
@@ -281,12 +280,9 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 		s->tag_ref = tag;
 
 #ifdef CONFIG_FRAC_SPLL
-		s->n_ref++;
-
 		if(s->tag_out_interp >= 0)
 		{
 			s->tag_out = s->tag_out_interp;
-			s->n_out++;
 			s->tag_out_interp = -1;
 		}
 #endif
@@ -301,7 +297,6 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 		if (s->div_ref == 0)
 		{
 			s->tag_out = tag;
-			s->n_out++;
 		}
 		else
 		{
@@ -326,7 +321,6 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 			//spll_debug(mtag | DBG_TAG, tr, 1);
 
 			s->tag_out = tr;
-			s->n_out++;
 
 			if (c0 == c1)
 			{
