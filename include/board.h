@@ -41,7 +41,7 @@
 #endif
 
 /* Board configuration. */
-#if defined(CONFIG_TARGET_GENERIC_PHY_8BIT) || defined(CONFIG_TARGET_GENERIC_PHY_16BIT) || defined(CONFIG_TARGET_SPEC_SILABS)
+#if defined(CONFIG_TARGET_GENERIC_PHY_8BIT) || defined(CONFIG_TARGET_GENERIC_PHY_16BIT)
 #  include "boards/generic/board-config.h"
 #elif defined(CONFIG_TARGET_WR_SWITCH)
 #  include "boards/wr-switch/board.h"
