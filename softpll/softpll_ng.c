@@ -560,21 +560,18 @@ void spll_show_stats(void)
 		/* Needs several pp_printf to avoid buffer overflow on printf
 		   buffer. */
 		pp_printf("irqs:%u "
-			  "ext-align:%d MFL%d MPL%d MY:%d DelCnt:%u setp:%d refcnt:%u tagcnt:%u m_kp:%d m_ki:%d m_sh:%d",
+			  "ext-align:%d DelCnt:%u setp:%d refcnt:%u tagcnt:%u",
 			  s->irq_count, s->ext.align_state,
+			  s->delock_count, s->mpll.phase_shift_current,
+			  s->ref_count, s->tag_count);
+		pp_printf(" MFL%d MPL%d MY:%d m_kp:%d m_ki:%d m_sh:%d",
 			  s->mpll.freq_ld.locked, s->mpll.phase_ld.locked,
 			  s->mpll.pi.y,
-			  s->delock_count, s->mpll.phase_shift_current,
-			  s->ref_count, s->tag_count,
-			  s->mpll.pi.kp,
-			  s->mpll.pi.ki,
-			  s->mpll.pi.shift);
+			  s->mpll.pi.kp, s->mpll.pi.ki, s->mpll.pi.shift);
 #ifndef CONFIG_IGNORE_HPLL
 		pp_printf(" HL%d HY=%d h_kp:%d h_ki:%d h_sh:%d",
 			  s->helper.ld.locked, s->helper.pi.y,
-			  s->helper.pi.kp,
-			  s->helper.pi.ki,
-			  s->helper.pi.shift);
+			  s->helper.pi.kp, s->helper.pi.ki, s->helper.pi.shift);
 #endif
 		pp_printf(" h_lock_ms:%d m_freq_lock_ms:%d m_phase_lock_ms:%d",
 			  s->helper.last_lock_duration_ms,
