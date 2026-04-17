@@ -11,6 +11,7 @@
 
 #include <wrc.h>
 #include "softpll_ng.h"
+#include "spll_hw.h"
 
 /* For dac-log: send dac values over udp (see daclog command) */
 #include "dev/dac_log.h"
@@ -375,8 +376,7 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 #ifdef CONFIG_LOCKSWEEP
 	if((s->locksweep_interrupt_cycles--) > 0) {
 		if(!(s->vco_freeze)) {
-			SPLL->DAC_MAIN = SPLL_DAC_MAIN_VALUE_W(s->pi.y)
-				| SPLL_DAC_MAIN_DAC_SEL_W(s->dac_index);
+			spll_write_dac(s->dac_index, s->pi.y);
 		}
 
 		// discard both tags. much necessary to keep the interval steady.
@@ -445,8 +445,7 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 
 	y = pi_update((spll_pi_t *)&s->pi, err);
 	if (!s->vco_freeze) {
-		SPLL->DAC_MAIN = SPLL_DAC_MAIN_VALUE_W(y)
-			| SPLL_DAC_MAIN_DAC_SEL_W(s->dac_index);
+		spll_write_dac(s->dac_index, y);
 	}
 
 	if (s->dac_index == 0)

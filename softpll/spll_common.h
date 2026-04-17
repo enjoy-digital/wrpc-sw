@@ -14,15 +14,6 @@
 
 #include <dev/syscon.h>
 
-#include <hw/softpll_regs.h>
-#include <hw/pps_gen_regs.h>
-
-#define SPLL_LOCKED 	1
-#define SPLL_LOCKING 	0
-
-#define SPLL ((volatile struct SPLL_WB*) (BASE_SOFTPLL))
-#define PPSG ((volatile struct PPSG_WB*) (BASE_PPS_GEN))
-
 /* PI regulator state */
 typedef struct {
 	int ki, kp;		/* integral and proportional gains (1<<PI_FRACBITS == 1.0f) */
@@ -66,7 +57,5 @@ int pi_update(spll_pi_t *pi, int x);
 
 void ld_init(spll_lock_det_t *ld);
 void ld_update(spll_lock_det_t *ld, int y);
-
-void spll_enable_tagger(int channel, int enable);
 
 #endif // __SPLL_COMMON_H

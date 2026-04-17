@@ -122,6 +122,9 @@ int spll_read_ptracker(int ref_channel, int32_t *phase_ps, int *enabled);
  * external reference are used in the design. */
 int spll_update(void);
 
+/* Called by the IRQ routine to handle the tags */
+void spll_handle_tags(int tag_source, int tag_value);
+
 /* Returns the status of given aux clock output (SPLL_AUX_) */
 struct spll_aux_clock_status spll_get_aux_status(int channel );
 

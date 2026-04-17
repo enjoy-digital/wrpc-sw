@@ -14,6 +14,12 @@
 #include "softpll_ng.h"
 #include "irq.h"
 
+#include <hw/softpll_regs.h>
+#include <hw/pps_gen_regs.h>
+
+#define SPLL ((volatile struct SPLL_WB*) (BASE_SOFTPLL))
+#define PPSG ((volatile struct PPSG_WB*) (BASE_PPS_GEN))
+
 /* The aligner produces a sample at 100Hz, so every 10_000_000 ns */
 #define ALIGN_SAMPLE_PERIOD 10000000
 
