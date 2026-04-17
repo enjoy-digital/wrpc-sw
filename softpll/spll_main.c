@@ -408,6 +408,7 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 		s->discard_early_cnt--;
 #endif
 
+	/* Frequency error: compare the period of out and ref. */
 	int freq_error = s->dout_dt - s->dref_dt;
 
 	ld_update((spll_lock_det_t *)&s->freq_ld, freq_error);
@@ -418,8 +419,10 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 
 	if (!s->freq_ld.locked)
 		err = -s->freq_prelock_gain_boost * freq_error;
-	else
+	else {
+		/* Phase error: compare the phase between out and ref */
 		err = s->adder_ref + s->tag_ref - s->adder_out - s->tag_out;
+	}
 
 #ifndef WITH_SEQUENCING
 
@@ -462,12 +465,14 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 	s->tag_out = -1;
 	s->tag_ref = -1;
 
+	/* Avoid overflow */
 	if (s->adder_ref > 2 * MPLL_TAG_WRAPAROUND
 	    && s->adder_out > 2 * MPLL_TAG_WRAPAROUND) {
 		s->adder_ref -= MPLL_TAG_WRAPAROUND;
 		s->adder_out -= MPLL_TAG_WRAPAROUND;
 	}
 
+	/* Slowly adjust phase shift */
 	if (s->locked && !s->ps_freeze) {
 		if (s->phase_shift_current < s->phase_shift_target) {
 			s->phase_shift_current++;
