@@ -2098,6 +2098,50 @@ the build of WRPC.
 
   Writes register <reg\_no> to read-write bank.
 
+\item[ep link] \mbox{}
+
+  Display link status. Available if \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep rd <REG>] \mbox{}
+
+  Read a register from the endpoint. Available if
+  \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep autoneg restart] \mbox{}
+\item[ep autoneg off] \mbox{}
+\item[ep autoneg on] \mbox{}
+
+  Control endpoint autonegotiation. Available if
+  \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep stat] \mbox{}
+
+  Display endpoint status. Available if
+  \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep tx 0|1] \mbox{}
+
+  Enable or disable the SFP tx (drives the \texttt{tx\_disable} line).
+  Available if \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep reset] \mbox{}
+
+  Put the endpoint on reset.
+  Available if \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep pd] \mbox{}
+
+  Immediately put the endpoint on powerdown. Software may not see the loss
+  of sync.
+  Available if \texttt{CONFIG\_CMD\_EP} is set.
+
+\item[ep en] \mbox{}
+\item[ep en 0|1] \mbox{}
+
+  Enable or disable the endpoint. Without argument, the command enables the
+  endpoint. Enabling will bring the endpoint out of reset.
+  Available if \texttt{CONFIG\_CMD\_EP} is set.
+
 \item[faketemp]
 \item[faketemp <T1> <T2> <T3>] \mbox{}
 
@@ -2322,12 +2366,12 @@ the build of WRPC.
 \item[ptp egress <int>] \mbox{}
 
   Sets in runtime \textit{Slave PHY delay TX} used by PTP.
-  If the change is small enough servo will stay in TRACK_PHASE.
+  If the change is small enough servo will stay in TRACK\_PHASE.
 
 \item[ptp egress <int>] \mbox{}
 
   Sets in runtime \textit{Slave PHY delay RX} used by PTP.
-  If the change is small enough servo will stay in TRACK_PHASE.
+  If the change is small enough servo will stay in TRACK\_PHASE.
 
 \item[ptp start] \mbox{}
 
