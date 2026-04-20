@@ -184,7 +184,7 @@ struct spll_aux_state {
 struct softpll_state {
 	int mode;
 	int seq_state;
-	uint32_t dac_timeout;
+	unsigned long dac_timeout;
 	int delock_count;
 	unsigned irq_count;
 	unsigned ref_count, tag_count;
