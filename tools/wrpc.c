@@ -1760,7 +1760,8 @@ static int do_version(int argc, char *argv[])
 
 static void help_load(const char *cmd)
 {
-        printf("usage: %s load [-c CORE] BOARD-OPTIONS FILENAME\n", progname);
+        printf("usage: %s %s [-c CORE] BOARD-OPTIONS FILENAME\n",
+	       progname, cmd);
         printf("Load FILENAME into WR cpu and restart the code\n");
 	printf("Option:\n"
 	       " -c CORE   select wrpc core (wrpc-v5 or wrpc-v4)\n");
@@ -4512,8 +4513,8 @@ struct rpu_load_data {
 	unsigned len;
 };
 
-static int elf_rpu_load_cb (void *data, unsigned char *buf,
-			    unsigned len, unsigned vaddr)
+static int elf_zynq_rpu_load_cb (void *data, unsigned char *buf,
+				 unsigned len, unsigned vaddr)
 {
 	struct rpu_load_data *d = (struct rpu_load_data *)data;
 
@@ -5982,7 +5983,7 @@ static int do_zynqmp_rpu(int argc, char *argv[])
 
 			const char *filename = argv[++i];
 			if (elf_foreach_segment(filename, EM_ARM,
-						elf_rpu_load_cb, &data_cb) < 0)
+						elf_zynq_rpu_load_cb, &data_cb) < 0)
 				return -1;
 
 			/* Wakeup RPU 0 */
@@ -6057,6 +6058,105 @@ static int do_gdbserver_rpu0(int argc, char *argv[])
 static int do_gdbserver_rpu1(int argc, char *argv[])
 {
 	return do_gdbserver_rpu(R5_DBG_1_BASEADDR, argc, argv);
+}
+
+static int elf_rpu_load_cb (void *data, unsigned char *buf,
+			    unsigned len, unsigned vaddr)
+{
+	struct dbg_port *dbg = (struct dbg_port *)data;
+	unsigned r0;
+	unsigned r1;
+
+	printf("RPU load at 0x%08x (up to 0x%08x)\n", vaddr, len);
+
+	r0 = dbg_r5_read_reg(dbg->dap, 0);
+	r1 = dbg_r5_read_reg(dbg->dap, 1);
+	dbg_r5_write_reg(dbg->dap, 0, vaddr);
+
+	while (vaddr % 4 == 0 && len > 4) {
+		uint32_t w;
+
+		w = buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
+		dbg_r5_write_reg(dbg->dap, 1, w);
+
+		/* str r1,[r0],#4 */
+		dbg_r5_exec_insn(dbg->dap, 0xe4801004);
+
+		len -= 4;
+		buf += 4;
+	}
+
+	while (len > 0) {
+		dbg_r5_write_reg(dbg->dap, 1, *buf);
+
+		/* strb r1,[r0],#1 */
+		dbg_r5_exec_insn(dbg->dap, 0xe4c01001);
+
+		len--;
+		buf++;
+	}
+
+	dbg_r5_write_reg(dbg->dap, 0, r0);
+	dbg_r5_write_reg(dbg->dap, 1, r1);
+
+
+	return 0;
+}
+
+static int do_load_rpu(unsigned r5_addr, int argc, char *argv[])
+{
+	struct dbg_port vdbg;
+	struct dbg_port *dbg = &vdbg;
+
+	if (dbg_init_rpu(dbg, r5_addr, &argc, argv) < 0)
+		return -1;
+
+	if (argc != 2) {
+		fprintf(stderr, "%s: missing filename\n", argv[0]);
+		return -1;
+	}
+	const char *filename = argv[1];
+
+	dbg_r5_unlock_access(dbg->dap);
+
+	/* For write-through */
+	dbg_r5_write_dsccr(dbg->dap, 0);
+
+	if (dbg_r5_halt(dbg->dap) < 0)
+		return -1;
+
+	if (elf_foreach_segment(filename, EM_ARM,
+				elf_rpu_load_cb, dbg) < 0)
+	  return -1;
+
+	/* svc mode, mask IRQ, FIQ, ASABORT */
+	dbg_r5_write_cpsr_via_r0(dbg->dap, 0x1d3);
+	dbg_r5_write_pc_via_r0(dbg->dap, 0);
+
+	/* Invalidate I cache */
+	dbg_r5_exec_iciallu(dbg->dap);
+
+	dbg_r5_write_vcr(dbg->dap, 0);
+	dbg_r5_restart(dbg->dap);
+
+        board->fini(board);
+        return 0;
+}
+
+static void help_load_rpu(const char *cmd)
+{
+        printf("usage: %s %s BOARD-OPTIONS FILENAME\n", progname, cmd);
+        printf("Load FILENAME into WR cpu and restart the code\n");
+}
+
+static int do_load_rpu0(int argc, char *argv[])
+{
+	return do_load_rpu(R5_DBG_0_BASEADDR, argc, argv);
+}
+
+static int do_load_rpu1(int argc, char *argv[])
+{
+	return do_load_rpu(R5_DBG_1_BASEADDR, argc, argv);
 }
 
 static int do_check_dbg_rpu(unsigned cpu_idx, int argc, char *argv[])
@@ -6733,6 +6833,20 @@ static const struct tool_base tool_gdbserver_rpu1 = {
         help_gdbserver
 };
 
+static const struct tool_base tool_load_rpu0 = {
+        "load-rpu0",
+	"load wrpc firmware and restart for ZynqUS+ RPU0",
+        do_load_rpu0,
+        help_load_rpu
+};
+
+static const struct tool_base tool_load_rpu1 = {
+        "load-rpu1",
+        "load wrpc firmware and restart for ZynqUS+ RPU1",
+        do_load_rpu1,
+        help_load_rpu
+};
+
 static const struct tool_base tool_check_dbg_rpu0 = {
         "checkdbg-rpu0",
         "Check debug port of cortex-r5 ZynqUS+ RPU0",
@@ -6821,6 +6935,8 @@ static const struct tool_base *tools[] = {
 	&tool_gdbserver,
 	&tool_gdbserver_rpu0,
 	&tool_gdbserver_rpu1,
+	&tool_load_rpu0,
+	&tool_load_rpu1,
 	&tool_rd,
 	&tool_check_dbg_rpu0,
 	&tool_check_dbg_rpu1,
