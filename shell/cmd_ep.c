@@ -84,6 +84,7 @@ int cmd_ep(const char *args[])
 		return 0;
 	}
 	case 3: {
+		/* "stat": endpoint status */
 		uint32_t dsr = ep_read(dev, EP_REG_DSR);
 		pp_printf("ready:   %u\n", (dsr & EP_DSR_GTREADY));
 		pp_printf("rx sync: %u\n", (dsr & EP_DSR_RXSYNC));
@@ -91,6 +92,7 @@ int cmd_ep(const char *args[])
 		return 0;
 	}
 	case 4: {
+		/* "tx 0/1": enable SFP tx (laser) */
 		unsigned en;
 		en =  (args[1] == NULL || atoi(args[1]) != 0);
 		ep_sfp_enable(dev, en);
@@ -104,11 +106,13 @@ int cmd_ep(const char *args[])
 		ep_pcs_write(dev, EP_MDIO_MCR, EP_MDIO_MCR_PDOWN);
 		return 0;
 	case 6:
+		/* "pd": drives reset and powerdown */
 		ep_write(dev, EP_REG_ECR, 0);
 		ep_pcs_write(dev, EP_MDIO_MCR,
 			     EP_MDIO_MCR_PDOWN | EP_MDIO_MCR_RESET);
 		return 0;
-	case 7: {
+	case 7:	{
+		/* Enable of disable the endpoint */
 		unsigned en;
 		en = (args[1] == NULL || atoi(args[1]) != 0);
 		ep_enable(dev, en, 1);
