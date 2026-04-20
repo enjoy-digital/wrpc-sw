@@ -47,9 +47,8 @@
 #define KEY_DELETE (126)
 
 static char cmd_buf[SH_MAX_LINE_LEN + 1];
-static int cmd_pos = 0, cmd_len = 0;
+static unsigned cmd_len = 0;
 static unsigned char state = SH_PROMPT;
-static uint16_t current_key = 0;
 
 struct wrc_shell_cmd {
 	const char *name;
@@ -65,6 +64,11 @@ static const struct wrc_shell_cmd cmds[] = {
 unsigned char shell_is_interacting;
 int (*shell_ui_callback)(void);
 
+#ifdef CONFIG_EXTENDED_CLI
+
+static unsigned cmd_pos = 0;
+static uint16_t current_key = 0;
+
 static int insert(char c)
 {
 	if (cmd_len >= SH_MAX_LINE_LEN)
@@ -73,7 +77,6 @@ static int insert(char c)
 	if (cmd_pos != cmd_len)
 		memmove(&cmd_buf[cmd_pos + 1], &cmd_buf[cmd_pos],
 			cmd_len - cmd_pos);
-
 	cmd_buf[cmd_pos] = c;
 	cmd_pos++;
 	cmd_len++;
@@ -91,6 +94,97 @@ static void esc(char code)
 {
 	pp_printf("\033[1%c", code);
 }
+
+static void line_edit(int c)
+{
+	if (c == 27 || ((current_key & ESCAPE_FLAG) && c == '[')) {
+		/* Escape sequence */
+		current_key = ESCAPE_FLAG;
+		return;
+	}
+
+	current_key |= c;
+
+	switch (current_key) {
+	case KEY_LEFT:
+		if (cmd_pos > 0) {
+			cmd_pos--;
+			esc('D'); /* Move cursor backward */
+		}
+		break;
+	case KEY_RIGHT:
+		if (cmd_pos < cmd_len) {
+			cmd_pos++;
+			esc('C'); /* Move cursor forward */
+		}
+		break;
+	case KEY_DELETE:
+		if (cmd_pos != cmd_len) {
+			delete(cmd_pos);
+			esc('P'); /* Delete character */
+		}
+		break;
+	case KEY_ENTER:
+	case KEY_ENTER10:
+		pp_printf("\n");
+		state = SH_EXEC;
+		break;
+
+	case KEY_BACKSPACE:
+		if (cmd_pos > 0) {
+			esc('D'); /* Move cursor backward */
+			esc('P'); /* Delete character */
+			delete(cmd_pos - 1);
+			cmd_pos--;
+		}
+		break;
+
+	case '\t':
+		break;
+
+	default:
+		if (insert(current_key)) {
+			esc('@'); /* Insert space */
+			pp_printf("%c", current_key);
+		}
+		break;
+
+	}
+	current_key = 0;
+}
+
+#else
+
+static void line_edit(int c)
+{
+	switch (c) {
+	case KEY_ENTER:
+	case KEY_ENTER10:
+		pp_printf("\n");
+		cmd_buf[cmd_len] = 0;
+		state = SH_EXEC;
+		break;
+
+	case KEY_BACKSPACE:
+		if (cmd_len > 0) {
+			pp_printf("\b \b");
+			cmd_len--;
+		}
+		break;
+
+	case '\t':
+		break;
+
+	default:
+		if (cmd_len < SH_MAX_LINE_LEN) {
+			cmd_buf[cmd_len++] = c;
+			pp_printf("%c", c);
+		}
+		break;
+
+	}
+}
+#endif
 
 int sub_cmd(const char * const *cmds, unsigned len, const char *args[])
 {
@@ -183,7 +277,6 @@ int shell_exec(const char *cmd)
 
 void shell_init()
 {
-	cmd_len = cmd_pos = 0;
 	state = SH_PROMPT;
 	shell_ui_callback = NULL;
 }
@@ -195,74 +288,18 @@ int shell_interactive()
 	switch (state) {
 	case SH_PROMPT:
 		pp_printf("wrc# ");
+#ifdef CONFIG_EXTENDED_CLI
 		cmd_pos = 0;
+#endif
 		cmd_len = 0;
 		state = SH_INPUT;
 		return 1;
 
 	case SH_INPUT:
 		c = console_getc();
-
 		if (c < 0)
 			return 0;
-
-		if (c == 27 || ((current_key & ESCAPE_FLAG) && c == '['))
-			current_key = ESCAPE_FLAG;
-		else
-			current_key |= c;
-
-		if (current_key & 0xff) {
-
-			switch (current_key) {
-			case KEY_LEFT:
-				if (cmd_pos > 0) {
-					cmd_pos--;
-					esc('D'); /* Move cursor backward */
-				}
-				break;
-			case KEY_RIGHT:
-				if (cmd_pos < cmd_len) {
-					cmd_pos++;
-					esc('C'); /* Move cursor forward */
-				}
-				break;
-
-			case KEY_ENTER:
-			case KEY_ENTER10:
-				pp_printf("\n");
-				state = SH_EXEC;
-				break;
-
-			case KEY_DELETE:
-				if (cmd_pos != cmd_len) {
-					delete(cmd_pos);
-					esc('P'); /* Delete character */
-				}
-				break;
-
-			case KEY_BACKSPACE:
-				if (cmd_pos > 0) {
-					esc('D'); /* Move cursor backward */
-					esc('P'); /* Delete character */
-					delete(cmd_pos - 1);
-					cmd_pos--;
-				}
-				break;
-
-			case '\t':
-				break;
-
-			default:
-				if (!(current_key & ESCAPE_FLAG)
-				    && insert(current_key)) {
-					esc('@'); /* Insert space */
-					pp_printf("%c", current_key);
-				}
-				break;
-
-			}
-			current_key = 0;
-		}
+		line_edit(c);
 		return 1;
 
 	case SH_EXEC:
@@ -332,14 +369,14 @@ void shell_boot_script(void)
 #endif
 
 	while (CONFIG_HAS_FLASH_INIT) {
-		cmd_len = storage_init_readcmd((uint8_t *)cmd_buf,
+		int len = storage_init_readcmd((uint8_t *)cmd_buf,
 					      SH_MAX_LINE_LEN, next);
-		if (cmd_len <= 0) {
+		if (len <= 0) {
 			if (next == 0)
 				pp_printf("Empty init script...\n");
 			break;
 		}
-		cmd_buf[cmd_len - 1] = 0;
+		cmd_buf[len - 1] = 0;
 
 		pp_printf("executing: %s\n", cmd_buf);
 		shell_exec(cmd_buf);
