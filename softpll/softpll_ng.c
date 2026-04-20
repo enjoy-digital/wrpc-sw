@@ -395,16 +395,6 @@ void spll_init(int mode, int slave_ref_channel, int flags)
 	enable_irq();
 }
 
-void spll_shutdown(void)
-{
-	disable_irq();
-
-	SPLL->OCER = 0;
-	SPLL->RCER = 0;
-	SPLL->ECCR = 0;
-	SPLL->EIC_IDR = 1;
-}
-
 int spll_start_channel(int channel)
 {
 	struct softpll_state *s = (struct softpll_state *) &softpll;

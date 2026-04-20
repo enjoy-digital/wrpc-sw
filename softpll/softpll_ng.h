@@ -89,9 +89,6 @@ Initializes the SoftPLL to work in mode (mode). Extra parameters depend on choic
 void spll_init(int mode, int ref_channel, int flags);
 void spll_very_init(void);
 
-/* Disables the SoftPLL and cleans up stuff */
-void spll_shutdown(void);
-
 /* Returns number of reference and output channels implemented in HW. */
 void spll_get_num_channels(int *n_ref, int *n_out);
 
