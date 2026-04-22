@@ -4,6 +4,7 @@ obj-softpll = \
 	softpll/spll_helper.o \
 	softpll/spll_main.o \
 	softpll/spll_ptracker.o \
+	softpll/spll_hw.o \
 	softpll/softpll_ng.o
 
 # softpll is used for nodes and for switch

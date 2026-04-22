@@ -89,9 +89,6 @@ Initializes the SoftPLL to work in mode (mode). Extra parameters depend on choic
 void spll_init(int mode, int ref_channel, int flags);
 void spll_very_init(void);
 
-/* Disables the SoftPLL and cleans up stuff */
-void spll_shutdown(void);
-
 /* Returns number of reference and output channels implemented in HW. */
 void spll_get_num_channels(int *n_ref, int *n_out);
 
@@ -124,6 +121,9 @@ int spll_read_ptracker(int ref_channel, int32_t *phase_ps, int *enabled);
  * it is not time-critical) in the main loop of the program if aux clocks or
  * external reference are used in the design. */
 int spll_update(void);
+
+/* Called by the IRQ routine to handle the tags */
+void spll_handle_tags(int tag_source, int tag_value);
 
 /* Returns the status of given aux clock output (SPLL_AUX_) */
 struct spll_aux_clock_status spll_get_aux_status(int channel );

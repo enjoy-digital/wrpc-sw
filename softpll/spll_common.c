@@ -10,9 +10,9 @@
 
 /* spll_common.c - common data structures and functions used by the SoftPLL */
 
-#include <string.h>
 #include <wrc.h>
 #include "softpll_ng.h"
+#include "spll_hw.h"
 
 int pi_update(spll_pi_t *pi, int x)
 {
@@ -86,36 +86,6 @@ void ld_init(spll_lock_det_t *ld)
 	ld->locked = 0;
 	ld->lock_cnt = 0;
 	ld->lock_changed = 0;
-}
-
-/* Enables/disables DDMTD tag generation on a given (channel). 
-
-Channels (0 ... splL_n_chan_ref - 1) are the reference channels
-	(e.g. transceivers' RX clocks or a local reference)
-
-Channels (spll_n_chan_ref ... spll_n_chan_out + spll_n_chan_ref-1) are the output
-	channels (local voltage controlled oscillators). One output
-	(usually the first one) is always used to drive the oscillator
-	which produces the reference clock for the transceiver. Other
-	outputs can be used to discipline external oscillators
-	(e.g. on FMCs).
-*/
-
-void spll_enable_tagger(int channel, int enable)
-{
-	if (channel >= spll_n_chan_ref) {	/* Output channel? */
-		if (enable)
-			SPLL->OCER |= 1 << (channel - spll_n_chan_ref);
-		else
-			SPLL->OCER &= ~(1 << (channel - spll_n_chan_ref));
-	} else {		/* Reference channel */
-		if (enable)
-			SPLL->RCER |= 1 << channel;
-		else
-			SPLL->RCER &= ~(1 << channel);
-	}
-
-	pll_verbose("%s: ch %d, OCER 0x%x, RCER 0x%x\n", __FUNCTION__, channel, SPLL->OCER, SPLL->RCER);
 }
 
 #ifdef BOARD_SPLL_DEBUG_QUEUE
@@ -198,6 +168,6 @@ void spll_debug(int src, int signal, int value, int last)
 	}
 #else
 	/* Push to HW fifo */
-	SPLL->DFR_SPLL = w;
+	spll_debug_push(w);
 #endif
 }

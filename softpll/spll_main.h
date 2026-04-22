@@ -28,7 +28,6 @@ struct spll_main_state {
 	int div_fb;
 	int div_ref;
 	int div_interp;
-	int n_ref, n_out;
 
 	int tag_out_raw_d, tag_out_raw;
 	int tag_out_interp;
@@ -58,8 +57,7 @@ struct spll_main_state {
 	int last_freq_lock_duration_ms;
 };
 
-void mpll_init(struct spll_main_state *s, int id_ref,
-		      int id_out);
+void mpll_init(struct spll_main_state *s, int id_ref, int id_out);
 
 void mpll_stop(struct spll_main_state *s);
 
@@ -67,8 +65,7 @@ void mpll_start(struct spll_main_state *s);
 
 void mpll_update(struct spll_main_state *s, int tag, int source);
 
-int mpll_set_phase_shift(struct spll_main_state *s,
-				int desired_shift_ps);
+int mpll_set_phase_shift(struct spll_main_state *s, int desired_shift_ps);
 
 int mpll_shifter_busy(struct spll_main_state *s);
 

@@ -10,6 +10,7 @@
 /* spll_helper.c - implmentation of the Helper PLL servo algorithm. */
 
 #include "softpll_ng.h"
+#include "spll_hw.h"
 
 #if defined(CONFIG_TARGET_WR_SWITCH)
 /* All not defined WRS versions */
@@ -70,8 +71,7 @@ void helper_init(struct spll_helper_state *s, int ref_channel)
 	s->ref_src = ref_channel;
 }
 
-void helper_update(struct spll_helper_state *s, int tag,
-			 int source)
+void helper_update(struct spll_helper_state *s, int tag, int source)
 {
 #if defined(CONFIG_IGNORE_HPLL)
 	s->ld.lock_changed = 1;
@@ -121,7 +121,7 @@ void helper_update(struct spll_helper_state *s, int tag,
 	s->tag_d0 = tag;
 
 	y = pi_update((spll_pi_t *)&s->pi, err);
-	SPLL->DAC_HPLL = y;
+	spll_write_helper_dac(y);
 
 	//spll_debug(SPLL_DBG_SRC_HELPER, SPLL_DBG_SIGNAL_TIME_MS, timer_get_tics(), 0);
 	//spll_debug(SPLL_DBG_SRC_HELPER, SPLL_DBG_SIGNAL_SAMPLE_ID, s->sample_n++, 0);
