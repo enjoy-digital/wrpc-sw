@@ -29,6 +29,13 @@
 
 static struct wrpc_socket *socks[NET_MAX_SOCKETS];
 
+#ifdef CONFIG_CMD_IP_STAT
+struct wrpc_socket *net_get_sock(unsigned i)
+{
+	return socks[i];
+}
+#endif
+
 void copy_eth_addr(mac_addr_t dest, const mac_addr_t src)
 {
 	memcpy (dest, src, ETH_ALEN);
@@ -162,6 +169,10 @@ static void ptpd_netif_linearize_rx_timestamp(struct wr_timestamp *ts,
 
 }
 
+/* Extract data from socket buffer Q.
+   LEN is the number of bytes to be extracted while BUFLEN is the destination
+   size (if not 0).
+   If LEN > BUFLEN, the extra bytes are discarded. */
 /* Slow, but we don't care much... */
 static int wrap_copy_in(void *dst, struct sockq *q, size_t len, size_t buflen)
 {
@@ -187,6 +198,7 @@ static int wrap_copy_in(void *dst, struct sockq *q, size_t len, size_t buflen)
 	return len;
 }
 
+/* Put LEN byte from SRC to socket buffer Q.  Return LEN */
 static int wrap_copy_out(struct sockq *q, void *src, size_t len)
 {
 	char *sptr = src;
@@ -278,6 +290,10 @@ int ptpd_netif_sendto(struct wrpc_socket *sock, struct wr_sockaddr *to,
 		    sock->bind_addr.udpport,
 		    data_length);
 
+#ifdef CONFIG_CMD_IP_STAT
+	sock->tx_pkts++;
+#endif
+
 	rval = minic_tx_frame(sock->nif->nic, &hdr, (uint8_t *) data, data_length, &hwts);
 
 	if (tx_timestamp) {
@@ -347,8 +363,15 @@ static int netif_poll(struct wrc_netif_device *nif)
 	if (!s) {
 		net_verbose("%s: could not find socket for packet\n",
 			   __FUNCTION__);
+#ifdef CONFIG_CMD_IP_STAT
+		nif->nic->rx_unmatch++;
+#endif
 		return 1;
 	}
+
+#ifdef CONFIG_CMD_IP_STAT
+	s->rx_pkts++;
+#endif
 
 	q = &s->queue;
 	q_required =
