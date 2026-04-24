@@ -553,6 +553,13 @@ config FRAC_SPLL
 
 comment "commands"
 
+config EXTENDED_CLI
+       boolean "Extend edition of command line"
+       default y
+       help
+        Can move with arrow within the current line and insert/delete at
+	any position
+
 config CMD_CONFIG
 	depends on WR_NODE
 	boolean "Add 'config' command to display this configuration"
