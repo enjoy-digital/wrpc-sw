@@ -7,14 +7,14 @@
 
 #include "dev/syscon.h"
 
-uint32_t timer_get_tics(void)
+unsigned long timer_get_tics(void)
 {
-  return *(volatile uint32_t *) (BASE_TIMER);
+  return *(volatile unsigned long *) (BASE_TIMER);
 }
 
-void timer_delay(uint32_t tics)
+void timer_delay(unsigned long tics)
 {
-	uint32_t t_end = timer_get_tics() + tics;
+	unsigned long t_end = timer_get_tics() + tics;
 
 	while (time_before(timer_get_tics(), t_end))
 	       ;

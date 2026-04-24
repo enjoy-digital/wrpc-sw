@@ -114,14 +114,14 @@ void timer_init(uint32_t enable)
 		SYSCON->TCR &= ~SYSC_TCR_ENABLE;
 }
 
-uint32_t timer_get_tics(void)
+unsigned long timer_get_tics(void)
 {
 	return SYSCON->TVR;
 }
 
-void timer_delay(uint32_t tics)
+void timer_delay(unsigned long tics)
 {
-	uint32_t t_end;
+	unsigned long t_end;
 
 	/*
 	timer_init(1);

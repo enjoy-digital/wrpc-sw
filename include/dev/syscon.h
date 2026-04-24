@@ -13,8 +13,8 @@
 #include <sys/types.h>
 #include "board.h"
 
-uint32_t timer_get_tics(void);
-void timer_delay(uint32_t tics);
+unsigned long timer_get_tics(void);
+void timer_delay(unsigned long tics);
 
 /* The following ones come from the kernel, but simplified */
 #ifndef time_after
