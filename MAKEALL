@@ -64,6 +64,9 @@ for c in $configs; do
     if ! [ -f "$output_name".elf ]; then
 	FAILED_LIST="$FAILED_LIST $c "
     fi
+
+    # Run simple test
+    make -C test/spll check
 done
 make -s clean
 

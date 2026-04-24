@@ -259,6 +259,7 @@ clean: boards-clean
 ifneq ($(CONFIG_TARGET_ERTM14),y)
 	$(MAKE) -C libertm clean
 endif
+	$(MAKE) -C test/spll clean
 
 distclean: clean
 	rm -rf include/config
