@@ -88,7 +88,7 @@ void helper_update(struct spll_helper_state *s, int tag, int source)
 
 	if (s->tag_d0 < 0) {
 		/* First tag. */
-		s->p_setpoint = tag;
+		s->p_setpoint = tag + (1 << HPLL_N);
 		s->tag_d0 = tag;
 
 		return;
