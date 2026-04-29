@@ -23,16 +23,6 @@ struct spll_main_state {
 	spll_lock_det_t freq_ld;
 	spll_gain_schedule_t* gain_sched;
 
-#ifdef CONFIG_FRAC_SPLL
-	int div_cnt;
-	int div_fb;
-	int div_ref;
-	int div_interp;
-
-	int tag_out_raw_d, tag_out_raw;
-	int tag_out_interp;
-#endif
-
 #ifdef CONFIG_LOCKSWEEP
 	int locksweep_interrupt_cycles; /* Amount of IRQs (time) locksweep takes control over the DAC */
 #endif

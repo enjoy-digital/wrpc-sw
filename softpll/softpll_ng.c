@@ -339,12 +339,6 @@ int spll_start_channel(int channel)
 	struct spll_aux_state *a = &s->aux[channel - 1];
 	struct spll_main_state *m = &a->pll.dmtd;
 
-#ifdef CONFIG_FRAC_SPLL
-	m->div_cnt = 0;
-	m->div_ref = a->div_ref;
-	m->div_fb = a->div_fb;
-#endif
-
 	mpll_start(m);
 
 	return 0;
@@ -520,12 +514,6 @@ void spll_show_stats(void)
 		struct spll_aux_state *s = (struct spll_aux_state *) &softpll.aux[ch - 1];
 
 		pp_printf("softpll: AUX%d:", ch-1);
-#ifdef CONFIG_FRAC_SPLL
-		pp_printf(" [ratio %d/%d = %d Hz]",
-			  s->div_fb,
-			  s->div_ref,
-			  REF_CLOCK_FREQ_HZ * s->div_fb / s->div_ref);
-#endif
 		pp_printf(" ph %d seq %d en %d lock %d samples %d ref %d out %d ERR=%d Y=%d\n",
 			  (int)s->phase_value,
 			  s->seq_state,
@@ -836,14 +824,6 @@ void spll_set_aux_mode( int channel, int mode )
 {
 	softpll.aux[channel].mode = mode;
 }
-
-#ifdef CONFIG_FRAC_SPLL
-void spll_set_aux_frequency_ratio( int channel, int div_ref, int div_fb )
-{
-	softpll.aux[channel].div_fb = div_fb;
-	softpll.aux[channel].div_ref = div_ref;
-}
-#endif
 
 int spll_pshifter_freeze(int freeze)
 {

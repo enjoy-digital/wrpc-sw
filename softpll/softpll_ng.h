@@ -154,7 +154,6 @@ int spll_get_debug_queue_samples( uint32_t *buf, unsigned count );
 void spll_debug_queue_configure( int undersample, int coalsesce_threshold );
 
 void spll_set_aux_mode( int channel, int mode );
-void spll_set_aux_frequency_ratio( int channel, int div_ref, int div_fb );
 
 int spll_is_ext_supported(void);
 
@@ -167,11 +166,6 @@ int spll_is_ext_supported(void);
 struct spll_aux_state {
 	int mode; /* SPLL_AUX_MODE* */
 	int seq_state;
-#ifdef CONFIG_FRAC_SPLL
-	/* Fractional pll ratio (0 if 1:1).  */
-	int div_ref;
-	int div_fb;
-#endif
 	int32_t phase_value;
 	union {
 		struct spll_main_state dmtd;

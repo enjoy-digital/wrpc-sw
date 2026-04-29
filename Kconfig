@@ -88,9 +88,6 @@ config TARGET_WR2RF_VME
 	help
 	  WR2RF-VME Board
 
-config TARGET_SPEC_SILABS
-	bool "SPEC Board with a silabs aux oscillator (TEST)"
-
 config TARGET_AMD_DEVBOARD
 	bool "AMD Development Board"
 	help
@@ -545,11 +542,6 @@ config W1_EEPROM
 	default n
 	help
 	  Add support for eeprom on W1 bus. Adds w1r and w1w commands.
-
-config FRAC_SPLL
-       boolean "Add support for fractional PLL (experimental)"
-       default y if TARGET_SPEC_SILABS
-       default n
 
 comment "commands"
 

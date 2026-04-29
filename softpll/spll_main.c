@@ -132,9 +132,6 @@ void mpll_init(struct spll_main_state *s, int id_ref, int id_out)
 	s->id_out = id_out;
 	s->dac_index = id_out - spll_n_chan_ref;
 	s->dbg_src_id = (s->dac_index == 0) ? SPLL_DBG_SRC_MAIN : SPLL_DBG_SRC_AUX( s->dac_index - 1 );
-#ifdef CONFIG_FRAC_SPLL
-	s->div_ref = s->div_fb = 0;
-#endif
 
 	if( s->gain_sched )
 	{
@@ -217,12 +214,6 @@ void mpll_start(struct spll_main_state *s)
 	s->sample_n = 0;
 	s->enabled = 1;
 	s->locked = 0;
-#ifdef CONFIG_FRAC_SPLL
-	s->tag_out_raw_d = -1;
-	s->tag_out_interp = -1;
-	s->tag_out_raw = -1;
-	s->div_cnt = 0;
-#endif
 
 	s->last_freq_lock_duration_ms = -1;
 	s->last_phase_lock_duration_ms = -1;
@@ -255,7 +246,6 @@ void mpll_stop(struct spll_main_state *s)
 	s->enabled = 0;
 }
 
-//#ifdef CONFIG_FRAC_SPLL
 static inline void update_dtag_dt( int *dtag_dt, int tag, int *tag_d )
 {
 	if( tag == *tag_d )
@@ -266,7 +256,6 @@ static inline void update_dtag_dt( int *dtag_dt, int tag, int *tag_d )
 			*dtag_dt += (1<<TAG_BITS);
 	*tag_d = tag;
 }
-//#endif
 
 void mpll_update(struct spll_main_state *s, int tag, int source)
 {
@@ -279,72 +268,12 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 	{
 		/* Capture ref tag */
 		s->tag_ref = tag;
-
-#ifdef CONFIG_FRAC_SPLL
-		if(s->tag_out_interp >= 0)
-		{
-			s->tag_out = s->tag_out_interp;
-			s->tag_out_interp = -1;
-		}
-#endif
 	}
 
 	if (source == s->id_out)
 	{
 		/* Capture out tag */
-#ifdef CONFIG_FRAC_SPLL
-		s->tag_out_raw_d = s->tag_out_raw;
-		s->tag_out_raw = tag;
-		if (s->div_ref == 0)
-		{
-			s->tag_out = tag;
-		}
-		else
-		{
-			int t_raw = s->tag_out_raw;
-			if (t_raw < s->tag_out_raw_d)
-				t_raw += (1 << TAG_BITS);
-
-			int w0 = s->div_cnt * s->div_fb;
-			int w1 = (s->div_cnt + 1) * s->div_fb;
-
-			//printf("w0 %d/%d w1 %d/%d\n", w0, div_ref, w1, div_ref );
-
-			int f0 = w0 % s->div_ref;
-			int f1 = w1 % s->div_ref;
-
-			int c0 = w0 / s->div_ref;
-			int c1 = w1 / s->div_ref;
-
-			int tr = ((s->div_ref - f0) * s->tag_out_raw_d + f0 * t_raw) / s->div_ref;
-
-			//printf("Interp[NORM]: %d tprev %d tcur %d c0 %d c1 %d f0 %d f1 %d\n", tr, tag_si_prev, tag_si, c0, c1, f0, f1 );
-			//spll_debug(mtag | DBG_TAG, tr, 1);
-
-			s->tag_out = tr;
-
-			if (c0 == c1)
-			{
-				s->div_cnt++;
-
-				int tr2 = ((s->div_ref - f1) * s->tag_out_raw_d + f1 * t_raw) / s->div_ref;
-
-				s->tag_out_interp = tr2;
-				//printf("Interp[SLIP]: %d tprev %d tcur %d c0 %d c1 %d f0 %d f1 %d\n", tr, tag_si_prev, tag_si, c0, c1, f0, f1 );
-			}
-			else
-			{
-				s->tag_out_interp = -1;
-			}
-
-			s->div_cnt++;
-
-			if (s->div_cnt == s->div_ref)
-				s->div_cnt = 0;
-		}
-#else
 		s->tag_out = tag;
-#endif
 	}
 
 	if (s->tag_ref >= 0) {
@@ -386,7 +315,6 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 	}
 #endif
 
-#ifndef CONFIG_FRAC_SPLL
 	if (s->discard_early_cnt == 1) {
 		int adj_ref = s->tag_ref + s->adder_ref;
 		int adj_out = s->tag_out + s->adder_out;
@@ -406,7 +334,6 @@ void mpll_update(struct spll_main_state *s, int tag, int source)
 
 	if( s->discard_early_cnt > 0 )
 		s->discard_early_cnt--;
-#endif
 
 	/* Frequency error: compare the period of out and ref. */
 	int freq_error = s->dout_dt - s->dref_dt;
