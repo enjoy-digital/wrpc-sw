@@ -25,10 +25,10 @@ struct gpio_pin
 
 
 
-int wb_gpio_create( struct gpio_device *device, uint32_t base_addr );
+int wb_gpio_create(struct gpio_device *device, uint32_t base_addr);
+
 void gen_gpio_set_dir(const struct gpio_pin *pin, int dir);
 void gen_gpio_out(const struct gpio_pin *pin, int value);
 int gen_gpio_in(const struct gpio_pin *pin);
-void gen_gpio_bang(const struct gpio_pin *pin, int count);
 
 #endif
