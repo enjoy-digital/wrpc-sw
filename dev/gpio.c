@@ -23,10 +23,11 @@
 #include "board.h"
 #include "dev/gpio.h"
 
-#define GPIO_REG_COR 0
-#define GPIO_REG_SOR 4
-#define GPIO_REG_DDR 8
-#define GPIO_REG_PSR 12
+/* wb_gpio registers */
+#define GPIO_REG_COR 0   /* Clear output register */
+#define GPIO_REG_SOR 4   /* Set output register */
+#define GPIO_REG_DDR 8   /* Data direction register */
+#define GPIO_REG_PSR 12  /* Pin State register */
 
 #define GPIO_BANK_SIZE 32
 
@@ -103,16 +104,3 @@ int gen_gpio_in(const struct gpio_pin *pin)
 
   return pin->device->read_pin(pin);
 }
-
-void gen_gpio_bang(const struct gpio_pin *pin, int count)
-{
-  int i = 0 ;
-  gen_gpio_out(pin, 0);
-  for(i =0;i<count;i++)
-  {
-    gen_gpio_out(pin, 1);
-    gen_gpio_out(pin, 0);
-  }
-}
-
-
