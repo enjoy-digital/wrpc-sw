@@ -981,7 +981,7 @@ static int get_p(uint8_t *buf, struct snmp_oid *obj)
 
 static int get_u16(uint8_t *buf, struct snmp_oid *obj)
 {
-	uint16_t tmp = *((uint16_t *)obj->p + obj->offset);
+	uint32_t tmp = *((uint16_t *)obj->p + obj->offset);
 	return get_value(buf, obj->asn, &tmp);
 }
 
