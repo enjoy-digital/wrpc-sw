@@ -86,6 +86,8 @@ struct simple_uart_device dev_uart;
 
 #ifdef CONFIG_ERTM14_FLASH
 
+#define SYSCON  ((volatile struct SYSC_WB *)BASE_SYSCON)
+
 struct spi_bus spi_flash;
 struct spi_flash_device dev_flash;
 
@@ -95,16 +97,15 @@ static void boot_sysc_gpio_set_dir(const struct gpio_pin *pin, int dir)
 
 static void boot_sysc_gpio_set_out(const struct gpio_pin *pin, int value)
 {
-	
     if(value)
-		writel( ( 1<< pin->pin), (void*) ( (void*)BASE_SYSCON + SYSC_REG_GPSR) );
-	else
-		writel( ( 1<< pin->pin), (void *) ( (void*)BASE_SYSCON + SYSC_REG_GPCR) );
+	SYSCON->GPSR = 1<< pin->pin;
+    else
+	SYSCON->GPCR = 1<< pin->pin;
 }
 
 static int boot_sysc_gpio_read_pin(const struct gpio_pin *pin)
 {
-  return readl( (void*)BASE_SYSCON + SYSC_REG_GPSR) & (1<<pin->pin) ? 1 : 0;
+    return SYSCON->GPSR & (1<<pin->pin) ? 1 : 0;
 }
 
 static const struct gpio_device boot_syscon_gpio = {
@@ -204,8 +205,8 @@ void send_reply(uint8_t code, int length, const uint8_t *data)
     buf[3] = (length >> 8) & 0xff;
     buf[4] = (length & 0xff);
 
-    if(length > 0)
-        memcpy(buf+5, data, length);
+    for (i = 0; i < length; i++)
+	buf[5 + i] = data[i];
 
     crc = crc16(buf, length+5);
 

@@ -11,12 +11,14 @@
 #include "board.h"
 #include "hw/wrc_syscon_regs.h"
 
+#define SYSCON  ((volatile struct SYSC_WB *)BASE_SYSCON)
+
 void timer_init(int enable)
 {
-	writel( SYSC_TCR_ENABLE, (void*) BASE_SYSCON + SYSC_REG_TCR );
+    SYSCON->TCR |= SYSC_TCR_ENABLE;
 }
 
 uint32_t timer_get_tics()
 {
-	return readl( (void*) BASE_SYSCON + SYSC_REG_TVR );
+    return SYSCON->TVR;
 }
