@@ -470,7 +470,7 @@ static int wait_ertm15_presence(void)
     timeout_t e15_powerup_timeout;
     timeout_t e15_rx_timeout;
 
-    tmo_init( &e15_powerup_timeout, 60000 );
+    tmo_init( &e15_powerup_timeout, 5000 );
 
     while( !tmo_expired( &e15_powerup_timeout ) )
     {
