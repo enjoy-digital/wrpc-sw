@@ -379,7 +379,7 @@ def run_terminal(ser):
     new[6][termios.VTIME] = 0  # cc
     termios.tcsetattr(fd, termios.TCSANOW, new)
 
-    print('[Press Ctrl-A to terminate session.]')
+    print('[Press Ctrl-A to terminate session.]\r\n')
 
     import atexit
     atexit.register(restore_terminal_state)
@@ -409,7 +409,7 @@ def main(argv):
     do_reset = False
     flash_target = None
     board_target = None
-    ser_speed=115200
+    ser_speed=921600
     try:
         opts, args = getopt.getopt(argv[1:], "hrb:f:s:p:t", ["uart"])
     except getopt.GetoptError:

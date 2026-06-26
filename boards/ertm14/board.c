@@ -470,7 +470,7 @@ static int wait_ertm15_presence(void)
     timeout_t e15_powerup_timeout;
     timeout_t e15_rx_timeout;
 
-    tmo_init( &e15_powerup_timeout, 60000 );
+    tmo_init( &e15_powerup_timeout, 5000 );
 
     while( !tmo_expired( &e15_powerup_timeout ) )
     {
@@ -1046,11 +1046,15 @@ void streamers_reset_rx_stats(void)
 void ertm14_apply_config(struct ertm14_board_state *cfg,
 	struct ertm14_board_state *mask, int force_all)
 {
-	/* this is lifted from Tom's ertm14_commit_board_config,
-	 * adding a condition to each operation to mask them at will
-	 */
-	int i;
-	for (i = 0; i <= ERTM14_CLKAB_OUT_MAX_ID; i++) {
+    /* Clocks are on ertm15 */
+    if (board.mode & ERTM14_MODE_WITHOUT_ERTM15)
+	return;
+
+    /* this is lifted from Tom's ertm14_commit_board_config,
+     * adding a condition to each operation to mask them at will
+     */
+    int i;
+    for (i = 0; i <= ERTM14_CLKAB_OUT_MAX_ID; i++) {
 		/* digital clocks */
 		int freq_a = cfg->clka_freq_hz[i];
 		int freq_b = cfg->clkb_freq_hz[i];
@@ -2163,7 +2167,7 @@ static int ertm14_low_level_init(void)
         board.mode |= ERTM14_MODE_WITHOUT_ERTM15;
 
     if ( board.mode & ERTM14_MODE_WITHOUT_ERTM15 )
-        board_dbg( "Configuring board *WITHOUT* eRTM15 support (eRTM15 not found, not powered on or disabled in software). The WRC will not be functional!\n");
+	board_dbg( "Configuring board *WITHOUT* eRTM15 support!\n");
     else
         board_dbg( "Configuring board WITH eRTM15 support.\n");
     
@@ -2173,7 +2177,7 @@ static int ertm14_low_level_init(void)
     {
         led_action( &board.leds.sync, LED_COLOR_1, LED_OFF );
         led_action( &board.leds.sync, LED_COLOR_2, LED_BLINK );
-        return 0;
+        //return 0;
     }
     else
     {
