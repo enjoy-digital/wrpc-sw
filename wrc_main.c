@@ -18,6 +18,7 @@
 #include "dev/minic.h"
 #include "dev/pps_gen.h"
 #include "dev/gpio.h"
+#include "dev/gnss_time.h"
 #include "dev/simple_uart.h"
 #include "dev/netif.h"
 #include "net.h"

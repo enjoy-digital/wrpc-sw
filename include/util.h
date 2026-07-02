@@ -33,6 +33,18 @@
 /* Default foreground color, White or Black depends on User's terminal */
 #define C_WHITE 9
 
+/* Like struct tm (from time.h), but we don't depend on the header. */
+struct time_m {
+	unsigned tm_sec;
+	unsigned tm_min;
+	unsigned tm_hour;
+	
+	unsigned tm_wday;
+	unsigned tm_mday;
+	unsigned tm_mon;
+	unsigned tm_year; /* Year from 0 to 9999 */
+};
+
 /* Return TAI date/time in human-readable form. Non-reentrant. */
 char *format_time(uint64_t sec, int format);
 #define TIME_FORMAT_LEGACY 0
@@ -46,6 +58,10 @@ typedef struct
     uint32_t start_tics;
     uint32_t timeout;
 } timeout_t;
+
+/* Calculate unix timestamp (seconds since epoch) from UTC date and time.
+ * Correct from 1901 to 2099. */
+int64_t utc_datetime_to_seconds(struct time_m datetime);
 
 /* Color printf() variant. Does not restore color */
 void cprintf(int color, const char *fmt, ...);

@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "board-config.h"
 #include "dev/bb_i2c.h"
 #include "dev/console.h"
 #include "dev/i2c_eeprom.h"
@@ -28,6 +29,13 @@
 #include "util.h"
 #include "wrc-debug.h"
 #include "wrc_global.h"
+
+#include "board_zcu10x_bus_wb.h"
+
+/* base addreses must be configured on runtime as they depend on the type of AMD devboard*/
+uint32_t BASE_FMC_ENABLE;
+uint32_t BASE_GNSS_UART;
+uint32_t BASE_SI570;
 
 typedef enum {
 	ZCU102,
@@ -508,6 +516,26 @@ int wrc_board_early_init(void)
 		          "Attempting generic initialization, but functionality may be missing or broken.\n", hw_name);
 	}
 
+	/*
+	 * set up base addresses for board-level peripherals
+	 */
+	switch (this_board) {
+		case ZCU102:
+		case ZCU106:
+			BASE_FMC_ENABLE = (BASE_AUXWB + BOARD_ZCU10X_BUS_WB_FMC_ENABLE);
+			BASE_GNSS_UART  = (BASE_AUXWB + BOARD_ZCU10X_BUS_WB_GNSS_UART);
+			BASE_SI570      = (BASE_AUXWB + BOARD_ZCU10X_BUS_WB_SI5XX);
+			break;
+		case ZC706:
+			//TODO: replace with cheby definitions
+		case UNSUPPORTED_BOARD:
+		case NUM_SUPPORTED_BOARDS:
+			/* use some default address values */
+			BASE_FMC_ENABLE = (BASE_AUXWB + 0x0000);
+			BASE_GNSS_UART  = (BASE_AUXWB + 0x0100);
+			BASE_SI570      = (BASE_AUXWB + 0x0200);
+			break;
+	}
 	/*
 	 * create and init I2C busses.
 	 * Notice:

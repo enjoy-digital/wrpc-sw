@@ -69,6 +69,10 @@ DEF_TASK("phy-cal", phy_calibration_init, phy_calibration_poll, NO_ENABLED)
 DEF_TASK("timecode", NO_INIT, timecode_update, NO_ENABLED)
 #endif
 
+#ifdef CONFIG_GNSS
+DEF_TASK("gnss", gnss_init, gnss_poll, NO_ENABLED)
+#endif
+
 #ifdef BOARD_TASKS
 BOARD_TASKS
 #endif

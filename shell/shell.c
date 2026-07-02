@@ -17,6 +17,7 @@
 #include "sensors.h"
 #include "dev/console.h"
 #include "dev/dac_log.h"
+#include "dev/gnss_time.h"
 #include "dev/syscon.h"
 #include "dev/temp-fake.h"
 #include "dev/temp-w1.h"

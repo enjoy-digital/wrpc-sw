@@ -1,0 +1,37 @@
+#ifndef __CHEBY__BOARD_ZCU10X_BUS_WB__H__
+#define __CHEBY__BOARD_ZCU10X_BUS_WB__H__
+
+#define BOARD_ZCU10X_BUS_WB_SIZE 320 /* 0x140 */
+
+/* REG fmc_enable */
+#define BOARD_ZCU10X_BUS_WB_FMC_ENABLE 0x0UL
+#define ADDR_MASK_BOARD_ZCU10X_BUS_WB_FMC_ENABLE 0x100UL
+#define ADDR_FMASK_BOARD_ZCU10X_BUS_WB_FMC_ENABLE 0x100UL
+#define BOARD_ZCU10X_BUS_WB_FMC_ENABLE_SIZE 256 /* 0x100 */
+
+/* REG gnss_uart */
+#define BOARD_ZCU10X_BUS_WB_GNSS_UART 0x100UL
+#define ADDR_MASK_BOARD_ZCU10X_BUS_WB_GNSS_UART 0x1e0UL
+#define ADDR_FMASK_BOARD_ZCU10X_BUS_WB_GNSS_UART 0x1e0UL
+#define BOARD_ZCU10X_BUS_WB_GNSS_UART_SIZE 32 /* 0x20 */
+
+/* REG si5xx */
+#define BOARD_ZCU10X_BUS_WB_SI5XX 0x120UL
+#define ADDR_MASK_BOARD_ZCU10X_BUS_WB_SI5XX 0x1e0UL
+#define ADDR_FMASK_BOARD_ZCU10X_BUS_WB_SI5XX 0x1e0UL
+#define BOARD_ZCU10X_BUS_WB_SI5XX_SIZE 32 /* 0x20 */
+
+#ifndef __ASSEMBLER__
+struct board_zcu10x_bus_wb {
+  /* [0x0]: SUBMAP */
+  uint32_t fmc_enable[64];
+
+  /* [0x100]: SUBMAP */
+  uint32_t gnss_uart[8];
+
+  /* [0x120]: SUBMAP */
+  uint32_t si5xx[8];
+};
+#endif /* !__ASSEMBLER__*/
+
+#endif /* __CHEBY__BOARD_ZCU10X_BUS_WB__H__ */

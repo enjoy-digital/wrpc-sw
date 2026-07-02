@@ -19,6 +19,7 @@
 
 #include "shell.h"
 #include "util.h"
+#include "dev/console.h"
 #include "dev/pps_gen.h"
 #include "cmds.h"
 
@@ -28,7 +29,41 @@ static const char * const time_cmds[] =
 	 [1] = "setsec",
 	 [2] = "setnsec",
 	 [3] = "raw",
+#ifdef CONFIG_CMD_TIME_MONITOR
+	 [4] = "monitor"
+#endif
 };
+
+#ifdef CONFIG_CMD_TIME_MONITOR
+static int time_monitor(void)
+{
+	term_clear();
+
+	pp_printf("Printing current timestamp (seconds only), cancel with <ESC>, <c> or <q>\n");
+
+	uint64_t sec;
+	uint64_t sec_prev = 0;
+	uint32_t nsec;
+
+	while (1) {
+		char c = console_getc();
+		if (c == 27 || c == 'q' || c == 'c') {
+			break;
+		}
+
+		shw_pps_gen_get_time(&sec, &nsec);
+		if (sec != sec_prev) {
+			sec_prev = sec;
+
+			// move cursor to line two, clear and print
+			pp_printf("\e[%d;%df", 2, 0);
+			term_clear_to_end();
+			pp_printf("%llu (%s)", sec, format_time(sec, TIME_FORMAT_LEGACY));
+		}
+	}
+	return 0;
+}
+#endif /* CONFIG_CMD_TIME_MONITOR */
 
 int cmd_time(const char *args[])
 {
@@ -68,6 +103,11 @@ int cmd_time(const char *args[])
 	case 3:
 		pp_printf("%d %d\n", (unsigned int) sec, (unsigned int) nsec);
 		return 0;
+#ifdef CONFIG_CMD_TIME_MONITOR
+	case 4:
+		time_monitor();
+		return 0;
+#endif
 	}
 
 

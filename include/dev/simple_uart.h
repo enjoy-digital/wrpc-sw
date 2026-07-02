@@ -21,6 +21,7 @@ void suart_write_byte(struct simple_uart_device *dev, int b);
 int suart_write_string(struct simple_uart_device *dev, const char *s);
 int suart_read_byte(struct simple_uart_device *dev);
 int suart_poll(struct simple_uart_device *dev);
+int suart_purge_rx_fifo(struct simple_uart_device *dev);
 int suart_is_fifo_supported( struct simple_uart_device *dev );
 
 #endif
