@@ -29,6 +29,23 @@ static const char * const ptrack_cmds[] =
 };
 
 
+/**
+ * @shellcommand ptrack
+ * @shellusage ptrack unfreeze
+ * Unfreezes the SPLL phase shifter.
+ *
+ * @shellusage ptrack ps-freeze [<phase>]
+ * Freezes the SPLL phase shifter, optionally at a phase value.
+ *
+ * @shellusage ptrack vco-freeze
+ * Freezes SPLL VCO control.
+ *
+ * @shellusage ptrack channel [<channel>]
+ * Displays or selects the phase-tracking channel.
+ *
+ * @shellusage ptrack stat
+ * Displays phase-tracking status.
+ */
 int cmd_ptrack(const char *args[])
 {
 	int icmd = sub_cmd(ptrack_cmds, ARRAY_SIZE(ptrack_cmds), args);

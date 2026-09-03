@@ -8,6 +8,11 @@
 #include "shell.h"
 #include "cmds.h"
 
+/**
+ * @shellcommand gui
+ * @shellusage gui
+ * Starts the WRPC graphical monitor.
+ */
 int cmd_gui(const char *args[])
 {
 	redraw_gui();

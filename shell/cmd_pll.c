@@ -66,6 +66,38 @@ static const unsigned char nargs[] =
 #endif
 };
 
+/**
+ * @shellcommand pll
+ * @shellusage pll init <mode> <ref_channel> <align_pps>
+ * Initializes the software PLL.
+ *
+ * @shellusage pll cl <channel>
+ * Checks whether the software PLL channel is locked.
+ *
+ * @shellusage pll stat
+ * Displays software PLL statistics.
+ *
+ * @shellusage pll sps <channel> <picoseconds>
+ * Sets the phase shift for a channel.
+ *
+ * @shellusage pll gps <channel>
+ * Displays the current and target phase shift.
+ *
+ * @shellusage pll start <channel>
+ * Starts the software PLL on a channel.
+ *
+ * @shellusage pll stop <channel>
+ * Stops the software PLL on a channel.
+ *
+ * @shellusage pll sdac <index> <value>
+ * Sets a software PLL DAC value.
+ *
+ * @shellusage pll gdac <index>
+ * Reads a software PLL DAC value.
+ *
+ * @shellusage pll gain <loop> <sched> <kp> <ki> <shift>
+ * Sets software PLL proportional-integral gains.
+ */
 int cmd_pll(const char *args[])
 {
 	unsigned narg;

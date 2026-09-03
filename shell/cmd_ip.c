@@ -70,6 +70,17 @@ static void cmd_ip_stat(void)
 }
 #endif
 
+/**
+ * @shellcommand ip
+ * @shellusage ip get
+ * Displays the WRPC IPv4 address.
+ *
+ * @shellusage ip set <ip>
+ * Sets the WRPC IPv4 address.
+ *
+ * @shellusage ip stat
+ * Displays packet usage per client.
+ */
 int cmd_ip(const char *args[])
 {
 	unsigned char ip[4];

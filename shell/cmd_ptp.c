@@ -107,6 +107,46 @@ static const char * const is_mode[] = {[WRC_MODE_GM] = "gm",
 #endif
 			 };
 
+/**
+ * @shellcommand mode
+ * @shellusage mode gm|master|slave
+ * Legacy alias for the ptp operating-mode command.
+ */
+/**
+ * @shellcommand ptp
+ * @shellusage ptp <e2e|p2p>
+ * Selects the PTP delay mechanism: end-to-end or peer-to-peer.
+ * The aliases delay and pdelay select e2e and p2p respectively. The p2p form
+ * is available when peer-to-peer support is enabled.
+ *
+ * @shellusage ptp gm|master|slave
+ * Sets the WRPC operating mode to Grandmaster, Master, or Slave.
+ * Grandmaster mode requires an external 10 MHz and 1-PPS reference. After
+ * changing mode, issue ptp start again.
+ *
+ * @shellusage ptp abscal
+ * Sets the WRPC mode for absolute calibration.
+ * This requires dedicated calibration hardware.
+ *
+ * @shellusage ptp bmc
+ * Displays the best-master-clock information for the current PTP instance.
+ * This form is available when CONFIG_CMD_PTP_ADV is enabled.
+ *
+ * @shellusage ptp <accuracy|allan|class|domain|egress|ingress|prio1|prio2|tsource> <value>
+ * Sets an advanced PTP parameter. Priority 1, priority 2, domain, accuracy,
+ * and time source use values from 0 to 255; clock class uses 1 to 255 and
+ * Allan variance uses 0 to 65535. The advanced and runtime forms depend on
+ * their corresponding build options.
+ * Changing the mode can reset previously configured PTP parameters.
+ *
+ * @shellusage ptp start
+ * Starts the WR PTP daemon.
+ *
+ * @shellusage ptp stop
+ * Stops the WR PTP daemon.
+ * Several subcommands may be concatenated in one command. With no arguments,
+ * ptp reports the current values.
+ */
 int cmd_ptp(const char *args[])
 {
 	int i, j, ret;

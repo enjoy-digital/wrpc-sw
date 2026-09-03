@@ -278,6 +278,24 @@ int latency_poll(void)
 }
 
 
+/**
+ * @shellcommand ltest
+ * @shellusage ltest
+ * Displays the latency-test interval and logging mode.
+ *
+ * @shellusage ltest <seconds> <milliseconds>
+ * Sets the latency-test sending interval. This command is available when
+ * CONFIG_LATENCY_PROBE is enabled.
+ *
+ * @shellusage ltest fake <nanoseconds>
+ * Adds a fake delay to trigger latency failures.
+ *
+ * @shellusage ltest quiet
+ * Disables latency messages in syslog when syslog support is available.
+ *
+ * @shellusage ltest verbose
+ * Enables latency messages in syslog when syslog support is available.
+ */
 int cmd_ltest(const char *args[])
 {
 	int v = 0, v1 = 0;

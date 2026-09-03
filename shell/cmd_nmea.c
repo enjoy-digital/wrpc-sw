@@ -137,6 +137,17 @@ static void print_status(void)
   pp_printf("valid: %d tip: %d invert: %d\n", valid, tip, get_invert());
 }
 
+/**
+ * @shellcommand nmea
+ * @shellusage nmea baud [<baudrate>]
+ * Displays or sets the NMEA baud rate.
+ *
+ * @shellusage nmea invert [0|1]
+ * Displays or sets NMEA signal inversion.
+ *
+ * @shellusage nmea status
+ * Displays NMEA timing status.
+ */
 int cmd_nmea(const char *args[])
 {
 

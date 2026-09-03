@@ -70,6 +70,14 @@ static int auxtmg_sel(const char *ip)
   return 0;
 }
 
+/**
+ * @shellcommand auxtmg
+ * @shellusage auxtmg status
+ * Displays the auxiliary timing input status.
+ *
+ * @shellusage auxtmg sel <clk|nmea|irig>
+ * Selects the auxiliary timing source.
+ */
 int cmd_auxtmg(const char *args[])
 {
   int icmd = sub_cmd(auxtmg_cmds, ARRAY_SIZE(auxtmg_cmds), args);

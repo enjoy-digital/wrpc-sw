@@ -75,6 +75,15 @@ int daclog_poll(void)
 	return 1;
 }
 
+/**
+ * @shellcommand daclog
+ * @shellusage daclog off
+ * Disables DAC logging.
+ *
+ * @shellusage daclog <ip> <mac>
+ * Sends DAC data to the specified host over UDP port 1050. This command is
+ * enabled by CONFIG_DAC_LOG.
+ */
 int cmd_daclog(const char *args[])
 {
 	char b1[32], b2[32];

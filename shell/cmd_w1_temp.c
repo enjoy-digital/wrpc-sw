@@ -9,6 +9,11 @@
 
 #define BLEN 32
 /* A shell command, for checking */
+/**
+ * @shellcommand w1
+ * @shellusage w1
+ * Lists devices connected to the 1-Wire bus.
+ */
 int cmd_w1(const char *args[])
 {
 	int i;

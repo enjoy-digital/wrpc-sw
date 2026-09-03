@@ -35,6 +35,11 @@
 #define ARCH_STRING "ARM-R5"
 #endif
 
+/**
+ * @shellcommand ver
+ * @shellusage ver
+ * Prints the running WRPC software version.
+ */
 int cmd_ver(const char *args[])
 {
 	int hwram = sysc_get_memsize();

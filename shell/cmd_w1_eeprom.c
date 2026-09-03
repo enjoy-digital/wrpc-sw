@@ -9,7 +9,11 @@
 
 #define BLEN 32
 
-/* A shell command, for testing write: "w1w <offset> <byte> [<byte> ...]" */
+/**
+ * @shellcommand w1w
+ * @shellusage w1w <offset> <byte> [<byte> ...]
+ * Writes decimal byte values to a 1-Wire EEPROM, up to 32 bytes.
+ */
 int cmd_w1w(const char *args[])
 {
 	struct w1_dev *w1_dev = w1_find_eeprom_device(&wrpc_w1_bus);
@@ -29,7 +33,12 @@ int cmd_w1w(const char *args[])
 	return i == blen ? 0 : -1;
 }
 
-/* A shell command, for testing read: "w1r <offset> <len> */
+/**
+ * @shellcommand w1r
+ * @shellusage w1r <offset> <length>
+ * Reads up to 32 bytes from a 1-Wire EEPROM. Both commands require
+ * CONFIG_W1_EEPROM and a discoverable EEPROM device.
+ */
 int cmd_w1r(const char *args[])
 {
 	struct w1_dev *w1_dev = w1_find_eeprom_device(&wrpc_w1_bus);

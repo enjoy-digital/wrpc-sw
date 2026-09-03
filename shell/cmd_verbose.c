@@ -22,6 +22,12 @@ static const char diag_names[8][8] = {
 };
 #endif
 
+/**
+ * @shellcommand verbose
+ * @shellusage verbose <digits>
+ * Sets the PPSI verbosity level. The digits control diagnostic output; for
+ * example, verbose 1111 is useful when inspecting PTP operation.
+ */
 int cmd_verbose(const char *args[])
 {
 	if (args[0])

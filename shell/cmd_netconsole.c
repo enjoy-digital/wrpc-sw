@@ -43,6 +43,21 @@ static void print_netconsole_status(void)
 	}
 }
 
+/**
+ * @shellcommand netconsole
+ * @shellusage netconsole
+ * Displays the configured netconsole peer.
+ *
+ * @shellusage netconsole <mac> <ip> <port>
+ * Sets the netconsole peer MAC address, IP address, and UDP port.
+ *
+ * @shellusage netconsole wait
+ * Waits for communication from a netconsole peer before transmitting.
+ *
+ * @shellusage netconsole disable
+ * Disables netconsole until it is enabled manually. This command requires
+ * CONFIG_CMD_NETCONSOLE.
+ */
 int cmd_netconsole(const char *args[])
 {
 	if (!args[0]) {

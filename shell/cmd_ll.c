@@ -15,6 +15,14 @@
 
 extern struct pp_globals *ppg;
 
+/**
+ * @shellcommand devmem
+ * @shellusage devmem <address>
+ * Reads a 32-bit word from memory or an FPGA register.
+ *
+ * @shellusage devmem <address> <value>
+ * Writes a 32-bit word to memory or an FPGA register.
+ */
 int cmd_devmem(const char *args[])
 {
 	uint32_t *addr, value;
@@ -33,6 +41,22 @@ int cmd_devmem(const char *args[])
 	return 0;
 }
 
+/**
+ * @shellcommand delays
+ * @shellusage delays
+ * Displays the configured frame transmission delays.
+ *
+ * @shellusage delays <tx> <rx>
+ * Delays are expressed in picoseconds. This command changes rx and tx
+ * deltas for the currently matched SFP and both, delta_rxm and delta_txm. For
+ * master mode, command has to be executed before the peer enters CALIBRATED
+ * state. Otherwise it makes no effect on slave side. For slave mode, if the command
+ * is executed before CALIBRATED is reached, then both slave deltas are changed
+ * delta_rxs (with added bitslide) and delta_txs. After the state CALIBRATED is
+ * reached, at every executrion of delays command both master deltas (delta_rxm
+ * and delta_txm) are be updated in realtime. If the SFP match is performed (e.g.
+ * link restart) the delays command has to be executed once more.
+ */
 int cmd_delays(const char *args[])
 {
 	wrh_servo_t * wr_servo;

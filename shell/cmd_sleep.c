@@ -10,6 +10,12 @@
 #include "shell.h"
 #include "cmds.h"
 
+/**
+ * @shellcommand sleep
+ * @shellusage sleep
+ * Delays shell execution for the specified number of seconds. The optional
+ * argument defaults to one second.
+ */
 int cmd_sleep(const char *args[])
 {
 	int sec = 1;

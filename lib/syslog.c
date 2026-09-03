@@ -34,6 +34,17 @@ void syslog_init(void)
 	tics_zero = timer_get_tics();
 }
 
+/**
+ * @shellcommand syslog
+ * @shellusage syslog off
+ * Disables the remote syslog destination.
+ *
+ * @shellusage syslog <ip> <mac>
+ * Sets the remote syslog destination.
+ *
+ * @shellusage syslog msg <message>
+ * Sends a message to the configured syslog destination.
+ */
 int cmd_syslog(const char *args[])
 {
 	char b1[32], b2[32];

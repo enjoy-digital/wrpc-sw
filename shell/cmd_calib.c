@@ -31,6 +31,26 @@ static const char * const calib_cmds[] =
 #endif
 };
 
+/**
+ * @shellcommand calibration
+ * @shellusage calibration
+ * Reads the stored phase transition or runs the t2/t4 calibration procedure.
+ * The command first tries to load the stored T24P value and measures it when
+ * no stored value is available.
+ *
+ * @shellusage calibration force
+ * Runs the t2/t4 calibration procedure.
+ *
+ * @shellusage calibration load
+ * Loads the stored calibration parameters.
+ *
+ * @shellusage calibration setp <parameter> <value>
+ * Sets and stores a calibration parameter.
+ *
+ * @shellusage calibration show
+ * Displays stored calibration parameters when CONFIG_CMD_CALIBRATION_SHOW is
+ * enabled.
+ */
 int cmd_calibration(const char *args[])
 {
 	int icmd;

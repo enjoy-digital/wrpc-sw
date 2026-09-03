@@ -15,6 +15,17 @@
 
 int wrc_stat_running;
 
+/**
+ * @shellcommand stat
+ * @shellusage stat
+ * Displays or toggles loggable statistics reporting.
+ *
+ * @shellusage stat <on|off>
+ * Enables or disables loggable statistics reporting.
+ *
+ * @shellusage stat bts
+ * Displays the bitslide value for the established WR link.
+ */
 int cmd_stat(const char *args[])
 {
 	/* no arguments: invert */

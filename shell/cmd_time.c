@@ -65,6 +65,29 @@ static int time_monitor(void)
 }
 #endif /* CONFIG_CMD_TIME_MONITOR */
 
+/**
+ * @shellcommand time
+ * @shellusage time
+ * Displays the current WRPC time.
+ *
+ * @shellusage time set <seconds> <nanoseconds>
+ * Sets the WRPC time.
+ *
+ * @shellusage time setsec <seconds>
+ * Sets only the seconds portion of the WRPC time. In Grandmaster mode this
+ * is useful when nanoseconds remain aligned to external 1-PPS and 10 MHz.
+ *
+ * @shellusage time setnsec <nanoseconds>
+ * Sets only the nanoseconds portion of the WRPC time.
+ *
+ * @shellusage time raw
+ * Displays the time as seconds and nanoseconds.
+ *
+ * @shellusage time monitor
+ * Continuously displays the current seconds value and exits on ESC, c, or q.
+ * Available when CONFIG_CMD_TIME_MONITOR is enabled. This debug command
+ * blocks execution of other shell commands while active.
+ */
 int cmd_time(const char *args[])
 {
 	int icmd;

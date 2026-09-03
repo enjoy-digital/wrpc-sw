@@ -54,6 +54,17 @@ static int gnss_status(void)
 	return 0;
 }
 
+/**
+ * @shellcommand gnss
+ * @shellusage gnss status
+ * Displays GNSS status and time information.
+ *
+ * @shellusage gnss raw <0|1>
+ * Enables or disables raw GNSS data output.
+ *
+ * @shellusage gnss sync
+ * Synchronizes the WRPC time from GNSS.
+ */
 int cmd_gnss(const char *args[])
 {
 	int icmd;
