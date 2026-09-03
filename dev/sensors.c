@@ -93,6 +93,11 @@ static const char* sensor_unit_string( uint8_t flags )
 		return "";
 }
 
+/**
+ * @shellcommand sensors
+ * @shellusage sensors
+ * Displays readings from registered generic sensors.
+ */
 int cmd_sensors(const char *args[])
 {
 	pp_printf("Sensors readout: \n");

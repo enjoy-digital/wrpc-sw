@@ -44,6 +44,35 @@ static const char * const ep_cmds[] =
 	 [7] = "en",
 };
 
+/**
+ * @shellcommand ep
+ * @shellusage ep link
+ * Displays Ethernet link status.
+ *
+ * @shellusage ep rd <register>
+ * Reads one of the endpoint registers msr, mcr, lpdc-ctrl, or lpdc-stat.
+ *
+ * @shellusage ep autoneg <restart|off|on>
+ * Controls endpoint autonegotiation.
+ *
+ * @shellusage ep stat
+ * Displays endpoint status.
+ *
+ * @shellusage ep tx [0|1]
+ * Enables or disables SFP transmission. With no value, transmission is
+ * enabled.
+ *
+ * @shellusage ep reset
+ * Resets the endpoint.
+ *
+ * @shellusage ep pd
+ * Puts the endpoint into powerdown; software may not observe the loss of
+ * synchronization.
+ *
+ * @shellusage ep en [0|1]
+ * Enables or disables the endpoint. With no value, it enables the endpoint
+ * and brings it out of reset.
+ */
 int cmd_ep(const char *args[])
 {
 	struct wr_endpoint_device* dev = &wrc_endpoint_dev;

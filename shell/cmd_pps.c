@@ -28,6 +28,14 @@ static const char * const pps_force_map[] = {
 	[pps_force_on]  = "on",
 };
 
+/**
+ * @shellcommand pps
+ * @shellusage pps
+ * Displays the status of PPS generation.
+ *
+ * @shellusage pps force <on|off>
+ * Enables or disables PPS generation independently of PPSI state.
+ */
 int cmd_pps(const char *args[])
 {
 	if (!strcasecmp(args[0], "force")) {

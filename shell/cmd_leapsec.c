@@ -27,6 +27,15 @@
  * counter is received from a master (slave) or is hardcoded in PPSI (master).
  * In master it is hardcoded to PP_DEFAULT_UTC_OFFSET, since master mode does
  * not have timescale set. */
+/**
+ * @shellcommand leapsec
+ * @shellusage leapsec get
+ * Displays the leap-second values used by PTP and the system.
+ *
+ * @shellusage leapsec set <number>
+ * Sets the leap-second value used by PTP; this is meaningful primarily in
+ * Grandmaster mode.
+ */
 int cmd_leapsec(const char *args[])
 {
 	int ptp_offset, system_offset;

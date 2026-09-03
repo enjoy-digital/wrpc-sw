@@ -35,6 +35,20 @@ static const char * const mac_cmds[] =
 	 [3] = "setp",
 };
 
+/**
+ * @shellcommand mac
+ * @shellusage mac get
+ * Prints the current WRPC MAC address.
+ *
+ * @shellusage mac getp [<port>]
+ * Reads the persistent MAC address from storage such as Flash or EEPROM.
+ *
+ * @shellusage mac set <mac>
+ * Sets the current WRPC MAC address.
+ *
+ * @shellusage mac setp <mac> [<port>]
+ * Stores a persistent MAC address in storage such as Flash or EEPROM.
+ */
 int cmd_mac(const char *args[])
 {
 	int icmd;

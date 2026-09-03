@@ -2,6 +2,11 @@
 #include "shell.h"
 #include "cmds.h"
 
+/**
+ * @shellcommand uptime
+ * @shellusage uptime
+ * Displays the time elapsed since WRPC startup.
+ */
 int cmd_uptime(const char *args[])
 {
 	extern uint32_t uptime_sec;

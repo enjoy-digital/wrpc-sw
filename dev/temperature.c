@@ -137,6 +137,11 @@ int wrc_temp_refresh(void)
 /*
  * The shell command
  */
+/**
+ * @shellcommand temp
+ * @shellusage temp
+ * Displays the current temperature sensor readings.
+ */
 int cmd_temp(const char *args[])
 {
 	char buffer[80];

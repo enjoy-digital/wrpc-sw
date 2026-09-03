@@ -1,0 +1,36 @@
+# WRPC shell command documentation
+
+This directory generates the WRPC shell command list from the `wrpc-sw`
+source code.
+
+## Generated files
+
+The generator reads:
+
+- `../../include/cmds.h` for the registered shell commands and their Kconfig conditions.
+- C files in `../../shell`, `../../dev`, and `../../lib` for `@shellcommand` and `@shellusage` documentation.
+
+The build produces:
+
+- `build/wrpc_shell_commands.tex`, a LaTeX fragment used by the WRPC manual.
+- `build/wrpc_shell_commands_doc.pdf`, a standalone PDF containing the command list.
+
+Generated files are placed in `build/`.
+
+## Usage
+
+From this directory, run:
+
+```sh
+make
+```
+
+To remove generated files, run:
+
+```sh
+make clean
+```
+
+When adding or changing a shell command, keep its `@shellcommand` and
+`@shellusage` documentation next to the implementation. The generated list
+will be updated when the command source is rebuilt.

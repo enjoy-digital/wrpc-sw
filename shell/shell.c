@@ -415,6 +415,11 @@ void shell_activate_ui_command( int (*callback)(void) )
 	cmd_len = 0;
 }
 
+/**
+ * @shellcommand help
+ * @shellusage help
+ * Lists the shell commands available in this WRPC instance.
+ */
 int cmd_help(const char *args[])
 {
 	int i;

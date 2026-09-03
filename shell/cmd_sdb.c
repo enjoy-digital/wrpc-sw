@@ -64,6 +64,33 @@ static void cmd_sdb_rdump(unsigned off)
 }
 #endif
 
+/**
+ * @shellcommand sdb
+ * @shellusage sdb
+ * Lists devices connected to the Wishbone bus.
+ *
+ * @shellusage sdb format [<base_address>]
+ * Creates an SDBFS image in storage, using the default location when no base
+ * address is supplied.
+ *
+ * @shellusage sdb fs [<base_address>]
+ * Creates an SDBFS image, using the default location when no base address is
+ * supplied. The current implementation treats the optional argument as a
+ * base address.
+ *
+ * @shellusage sdb fse [<base_address>]
+ * Erases an SDBFS image, using the default location when no base address is
+ * supplied. The current implementation treats the optional argument as a
+ * base address.
+ *
+ * @shellusage sdb ls
+ * Lists the contents of the SDBFS image.
+ *
+ * @shellusage sdb rdump [<offset>]
+ * Dumps 256 bytes of storage beginning at the specified hexadecimal offset,
+ * or at zero when no offset is supplied. This form is available when
+ * CONFIG_CMD_SDB_RDUMP is enabled.
+ */
 int cmd_sdb(const char *args[])
 {
 	int icmd;

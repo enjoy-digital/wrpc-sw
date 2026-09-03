@@ -23,6 +23,21 @@ static const char * const init_cmds[] =
 	 [3] = "boot",
 };
 
+/**
+ * @shellcommand init
+ * @shellusage init erase
+ * Erases the initialization script.
+ *
+ * @shellusage init add <command>
+ * Adds a command to the end of the initialization script.
+ *
+ * @shellusage init show
+ * Displays the stored initialization script.
+ *
+ * @shellusage init boot
+ * Executes the stored initialization script. The script is also executed
+ * automatically when WRPC starts after a soft-core reset.
+ */
 int cmd_init(const char *args[])
 {
 	int icmd;

@@ -88,6 +88,14 @@ static void print_settings(struct params *p)
   pp_printf("duty: %d%%\n", p->duty);
 }
 
+/**
+ * @shellcommand auxclk
+ * @shellusage auxclk set [<frequency> [<duty>]]
+ * Sets the auxiliary clock frequency and optional duty cycle.
+ *
+ * @shellusage auxclk get
+ * Displays the current auxiliary clock settings.
+ */
 int cmd_auxclk(const char *args[])
 {
 

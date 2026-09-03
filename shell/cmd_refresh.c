@@ -15,6 +15,13 @@
 #include "shell.h"
 #include "cmds.h"
 
+/**
+ * @shellcommand refresh
+ * @shellusage refresh <seconds>
+ * Changes the update period of GUI and statistics reporting. The default
+ * period is one second; setting zero disables periodic updates after the
+ * current update.
+ */
 int cmd_refresh(const char *args[])
 {
 	int sec;

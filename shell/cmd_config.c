@@ -14,6 +14,11 @@
 
 extern char _binary__config_bin_start[];
 
+/**
+ * @shellcommand config
+ * @shellusage config
+ * Prints the WRPC and PPSI build configuration.
+ */
 int cmd_config(const char *args[])
 {
 	pp_printf("  Current WRPC-SW configuration:\n");

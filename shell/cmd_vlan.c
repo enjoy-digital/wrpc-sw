@@ -14,6 +14,17 @@
 #include "wrc_global.h"
 #include "cmds.h"
 
+/**
+ * @shellcommand vlan
+ * @shellusage vlan
+ * Displays the active VLAN number.
+ *
+ * @shellusage vlan set <number>
+ * Sets the active VLAN number.
+ *
+ * @shellusage vlan off
+ * Disables VLAN operation.
+ */
 int cmd_vlan(const char *args[])
 {
 	int i;

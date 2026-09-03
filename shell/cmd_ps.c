@@ -14,6 +14,20 @@
 
 extern uint32_t print_task_time_threshold;
 
+/**
+ * @shellcommand ps
+ * @shellusage ps
+ * Lists running CPU tasks, including iterations, maximum execution time, and
+ * CPU time accumulated since boot or the last reset.
+ *
+ * @shellusage ps reset
+ * Clears task profiling information.
+ *
+ * @shellusage ps max <milliseconds>
+ * Reports tasks whose execution time exceeds the specified threshold and
+ * reports when a task exceeds its previous maximum. Use zero to stop these
+ * threshold reports.
+ */
 int cmd_ps(const char *args[])
 {
 	struct wrc_task_usage *t;

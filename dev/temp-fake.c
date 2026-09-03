@@ -26,6 +26,15 @@ static int temp_fake_refresh(struct wrc_temp_sensor *t)
 	return 0;
 }
 
+/**
+ * @shellcommand faketemp
+ * @shellusage faketemp
+ * Displays the three simulated temperature values.
+ *
+ * @shellusage faketemp <T1> <T2> <T3>
+ * Sets the three simulated temperature values. The command is intended for
+ * testing the temperature and syslog mechanisms.
+ */
 int cmd_faketemp(const char *args[])
 {
 	int i;

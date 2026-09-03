@@ -14,6 +14,17 @@
 #include "dev/syscon.h"
 #include "cmds.h"
 
+/**
+ * @shellcommand diag
+ * @shellusage diag ro <register>
+ * Reads an auxiliary read-only diagnostic register.
+ *
+ * @shellusage diag rw <register>
+ * Reads an auxiliary read-write diagnostic register.
+ *
+ * @shellusage diag w <register> <value>
+ * Writes an auxiliary read-write diagnostic register.
+ */
 int cmd_diag(const char *args[])
 {
 	uint32_t id, ver, nrw, nro;

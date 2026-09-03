@@ -132,6 +132,32 @@ static const char * const sfp_cmds[] =
 #endif
 };
 
+/**
+ * @shellcommand sfp
+ * @shellusage sfp erase
+ * Erases the SFP calibration database.
+ *
+ * @shellusage sfp add <PN> <deltaTx> <deltaRx> <alphaH> <alphaL>
+ * Stores calibration parameters for an SFP. alphaH and alphaL are the higher
+ * and lower nine decimal digits of alpha; alphaH carries the sign.
+ *
+ * @shellusage sfp show
+ * Displays all SFPs stored in the database.
+ *
+ * @shellusage sfp match [force]
+ * Prints the plugged SFP identifier, then matches it and loads its calibration
+ * parameters. force requests a forced match.
+ *
+ * @shellusage sfp ena <0|1>
+ * Enables or disables SFP transmission.
+ *
+ * @shellusage sfp info
+ * Displays detailed information about the plugged SFP, including DOM data when
+ * supported by the SFP and build configuration.
+ *
+ * @shellusage sfp tune <channel|wavelength>
+ * Tunes a tunable SFP by SFP channel, not ITU channel, or by wavelength in nm.
+ */
 int cmd_sfp(const char *args[])
 {
 	int icmd;
