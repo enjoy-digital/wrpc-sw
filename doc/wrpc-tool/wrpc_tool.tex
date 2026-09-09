@@ -1,0 +1,351 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+%% SPDX-FileCopyrightText: 2026 CERN (home.cern) 
+%%
+%% SPDX-License-Identifier: CC-BY-SA-4.0+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+
+% This file is both the standalone tool manual and an appendix fragment
+% included by the WRPC user manual.
+
+\newif\ifwrpctoolstandalone
+\ifcsname ver@article.cls\endcsname
+  \wrpctoolstandalonefalse
+\else
+  \wrpctoolstandalonetrue
+\documentclass[a4paper,12pt]{article}
+\usepackage[english]{babel}
+\usepackage{fullpage}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{mdwlist}
+
+\lstset{columns=flexible, upquote=true, frame=single,
+basicstyle=\footnotesize\ttfamily, backgroundcolor=\color[gray]{0.95}}
+
+\title{WRPC Host Tool}
+\author{White Rabbit Team}
+
+\begin{document}
+\maketitle
+\fi
+
+\section{WRPC host tool}
+\label{appendix:wrpc_tool}
+
+The \texttt{wrpc} host utility is a multi-purpose command-line tool for
+accessing a running WRPC instance. It provides one command-line interface for
+several access methods and operations which were previously provided by
+board-specific utilities. The exact command set depends on the options used
+when the utility is compiled.
+
+\subsection{Invocation model}
+
+The general form is:
+
+\begin{lstlisting}
+wrpc COMMAND [COMMAND-OPTIONS] [BOARD-OPTIONS] [ARGUMENTS]
+\end{lstlisting}
+
+The most useful discovery commands are:
+
+\begin{lstlisting}
+wrpc help
+wrpc help COMMAND
+wrpc board
+wrpc board BOARD
+wrpc --version
+\end{lstlisting}
+
+\subsection{Building the tool and WRPC firmware}
+
+The host utility is built from \texttt{tools/wrpc.c} in the \textit{wrpc-sw}
+repository. The repository must be configured before building. A typical build
+starts as follows:
+
+\begin{lstlisting}
+git clone https://gitlab.com/ohwr/project/wrpc-sw.git
+cd wrpc-sw
+git submodule update --init
+make menuconfig
+\end{lstlisting}
+
+Use the configuration menu to select the target and features required by the
+WRPC design. For a RISC-V WRPC, select the RISC-V architecture and configure
+the platform and RAM size to match the FPGA design. The RISC-V cross-compiler
+must be installed and available in the path before compiling firmware. For
+example:
+
+\begin{lstlisting}
+export PATH=/opt/gnu/riscv-11.2-small/bin:$PATH
+\end{lstlisting}
+
+There are separate make targets for the embedded firmware and the host
+utilities:
+
+\begin{description}
+\item[\texttt{make}] Build the configured WRPC firmware and its generated
+  images. The main output is normally \texttt{wrc.elf}; depending on the
+  selected architecture, binary and memory-initialization outputs such as
+  \texttt{wrc.bin}, \texttt{wrc.bram}, \texttt{wrc.mem}, \texttt{wrc.mif}, or
+  \texttt{wrc.vhd} may also be generated.
+\item[\texttt{make tools}] Build the host-side utilities, including
+  \texttt{tools/wrpc}, \texttt{tools/wrpc-load}, and
+  \texttt{tools/wrpc-vuart}. This target also builds the host libraries needed
+  by the tools.
+\item[\texttt{make -C tools wrpc}] Rebuild only the main \texttt{wrpc}
+  executable after the software tree has already been configured and its
+  generated headers are available.
+\end{description}
+
+For a complete firmware and host-tool build, use:
+
+\begin{lstlisting}
+make
+make tools
+\end{lstlisting}
+
+The current configuration can be changed with \texttt{make menuconfig} and
+the build can be repeated with \texttt{make}. To remove normal build outputs,
+use \texttt{make clean}; \texttt{make distclean} also removes generated
+configuration data and is appropriate when starting a configuration from
+scratch. Run \texttt{wrpc help} and \texttt{wrpc board} after building to
+check the commands and access methods compiled into the resulting executable.
+
+\subsection{Access methods}
+
+Every operation which accesses WRPC registers first selects a board or access
+method. If \texttt{-b} is omitted, the default is \texttt{pci}. The available
+methods are compile-time dependent; the authoritative list for a particular
+binary is printed by \texttt{wrpc board}.
+
+\subsubsection{Generic PCI access}
+
+The \texttt{pci} method maps a PCI resource file. One of \texttt{-f} or
+\texttt{-s} is required, and \texttt{-o} selects the WRPC offset within the
+resource:
+
+\begin{lstlisting}
+wrpc COMMAND -b pci -f /sys/bus/pci/devices/DOMAIN:BUS:DEV.FUNC/resourceN \\
+    [-o OFFSET] [COMMAND-OPTIONS]
+
+wrpc COMMAND -b pci -s [DOMAIN:]BUS:DEV[.FUNC][@BAR] [COMMAND-OPTIONS]
+\end{lstlisting}
+
+The \texttt{-s} form is converted to the corresponding path under
+\texttt{/sys/bus/pci/devices}. Domain, bus, device, function, and BAR are
+parsed as hexadecimal values, while the resource-file offset is parsed as a
+numeric C-style value.
+
+\subsubsection{SPEC access}
+
+The \texttt{spec} method uses the SPEC PCI resource convention and applies the
+WRPC register offset \texttt{0x1000}:
+
+\begin{lstlisting}
+wrpc COMMAND -b spec -f RESOURCE-FILE [COMMAND-OPTIONS]
+wrpc COMMAND -b spec -s [DOMAIN:]BUS:DEV[.FUNC] [COMMAND-OPTIONS]
+\end{lstlisting}
+
+\subsubsection{Host memory access}
+
+The \texttt{host} method maps an AXI-connected WRPC through a host memory
+device. The base address is required. The default mapping file is
+\texttt{/dev/mem}; \texttt{-f} can select another device such as a UIO
+resource:
+
+\begin{lstlisting}
+wrpc COMMAND -b host -b BASE [COMMAND-OPTIONS]
+wrpc COMMAND -b host -b BASE -f /dev/mem [COMMAND-OPTIONS]
+\end{lstlisting}
+
+Here the first \texttt{-b} selects the access method and the second specifies
+the mapped base address. The base address is parsed with base detection, so
+values such as \texttt{0xA0000000} may be used.
+
+Other access methods, like \texttt{wren-vme}, are available only when their support
+was enabled at build time. Use \texttt{wrpc board BOARD} for the options of an
+enabled method.
+
+\subsection{Firmware loading and memory operations}
+
+\texttt{load} operates on the WRPC embedded soft-core CPU memory. It does not program
+the FPGA configuration bitstream. FPGA programming remains the responsibility
+of the board-specific programming tool or boot flow.
+
+\begin{lstlisting}
+wrpc load [-c wrpc-v5|wrpc-v4] BOARD-OPTIONS FILENAME
+\end{lstlisting}
+
+By default, the command resets the WRPC CPU, writes the image, and releases
+the CPU from reset. The supported options are:
+
+\begin{description}
+\item[\texttt{-c CORE}] Select the WRPC memory interface, either
+  \texttt{wrpc-v5} for the RISC-V design or \texttt{wrpc-v4} for the older
+  interface.
+\item[\texttt{-v}] Print each word written.
+\item[\texttt{-k}] Read back each word and report verification errors.
+\item[\texttt{-r}] Do not reset or restart the CPU.
+\item[\texttt{-d}] Dump the first \texttt{0x200} bytes instead of loading an
+  image.
+\item[\texttt{-s}] Save the WRPC memory to the named file. The saved image is
+  128 KiB.
+\end{description}
+
+Raw binary images are written sequentially from address zero. 32-bit
+little-endian RISC-V ELF images are also accepted by the v5 loader; loadable
+segments are written to their ELF virtual addresses. The image must be
+word-aligned after the loader's four-byte padding rules are applied.
+
+Examples:
+
+\begin{lstlisting}
+wrpc load -b pci -s 0000:20:00.0@0 wrc.bin
+wrpc load -c wrpc-v5 -b pci -s 0000:20:00.0@0 -k wrc.elf
+wrpc load -b pci -s 0000:20:00.0@0 -d
+wrpc load -b pci -s 0000:20:00.0@0 -s saved-memory.bin
+\end{lstlisting}
+
+For the Kria KR260 reference design, the WRPC is mapped through the host
+access method at \texttt{0x80000000}. After copying the rebuilt
+\texttt{wrc.elf} to the board, load it without rebuilding the FPGA project:
+
+\begin{lstlisting}
+sudo wrpc-sw/tools/wrpc load -b host -b 0x80000000 wrc.elf
+\end{lstlisting}
+
+The KR260 reference design uses a 192~kB (196608-byte) WRPC memory. Configure
+the WRPC firmware for the RISC-V target, generic 16-bit platform, and this RAM
+size before building the firmware.
+
+\subsection{Virtual UART and WRPC shell}
+
+The \texttt{vuart} command accesses the WRPC virtual UART mapped in the core.
+With no mode option it provides an interactive terminal. Interactive mode uses
+a terminal configuration suitable for the virtual UART and exits when
+\texttt{Ctrl-A} is pressed.
+
+\begin{lstlisting}
+wrpc vuart BOARD-OPTIONS [-k] [-c COMMAND] [-r] [-t TIMEOUT] [-d]
+\end{lstlisting}
+
+\begin{description}
+\item[\texttt{-c COMMAND}] Send one WRPC shell command and print its response
+  until the \texttt{wrc\#} prompt is detected.
+\item[\texttt{-r}] Read-only mode. Print incoming VUART data without reading
+  standard input; useful for scripts and logging.
+\item[\texttt{-t SECONDS}] Stop terminal or read-only mode after the given
+  number of seconds.
+\item[\texttt{-k}] Keep the current terminal settings instead of switching
+  to raw VUART settings.
+\item[\texttt{-d}] Print VUART register activity for debugging.
+\end{description}
+
+The \texttt{-c}, \texttt{-r}, and \texttt{-d} modes are mutually exclusive.
+
+Examples:
+
+\begin{lstlisting}
+wrpc vuart -b pci -s 0000:20:00.0@0
+wrpc vuart -b pci -s 0000:20:00.0@0 -c "ptp status"
+wrpc vuart -b pci -s 0000:20:00.0@0 -r -t 10
+\end{lstlisting}
+
+On the Kria KR260, connect to the same host mapping used for firmware loading:
+
+\begin{lstlisting}
+sudo wrpc-sw/tools/wrpc vuart -b host -b 0x80000000
+\end{lstlisting}
+
+This opens the WRPC shell through the virtual UART after the FPGA gateway and
+WRPC software have been loaded.
+
+\subsection{Information and diagnostics}
+
+The following commands provide basic WRPC inspection:
+
+\begin{description}
+\item[\texttt{info}] Display WRPC hardware and software identification and
+  check that the selected mapping is usable.
+\item[\texttt{mac}] Read and display the WRPC endpoint MAC address.
+\item[\texttt{wdiags}] Read the WR diagnostics snapshot, including servo,
+  port, PTP, auxiliary-clock, frame-counter, time, delay, offset, phase, and
+  temperature information.
+\item[\texttt{aux-logger}] Print the AUX0 diagnostic value in a form suitable
+  for logging.
+\item[\texttt{rd}] Read one word from the local bus. The command supports an
+  address option \texttt{-a ADDRESS}; its default is \texttt{0xff040000}. It
+  is primarily useful on access methods which expose a local-bus mapping.
+\end{description}
+
+\subsection{SoftPLL tools}
+
+\texttt{spll-recorder} captures real-time SoftPLL traces, such as error
+values, DAC drive values, and events. Its documented options are:
+
+\begin{description}
+\item[\texttt{-u USAMP}] Set the undersampling factor when supported by the
+  selected SoftPLL data source.
+\item[\texttt{-d}] Enable debug output.
+\item[\texttt{-b}] Produce binary output.
+\end{description}
+
+The output can be passed to \texttt{spll-display}, which displays recorded
+SoftPLL data. The exact recorder/display options should be checked with
+\texttt{wrpc help spll-recorder} and \texttt{wrpc help spll-display}, because
+the available data sources depend on the build configuration.
+
+\subsection{Debugging and RPU commands}
+
+\texttt{gdbserver} exposes the WRPC RISC-V CPU through a GDB remote server:
+
+\begin{lstlisting}
+wrpc gdbserver BOARD-OPTIONS [-p PORT] [-v] [-t] [-k] [-r]
+\end{lstlisting}
+
+The options select the TCP listen port, verbose output, terminal support, and
+whether the server keeps accepting connections. The \texttt{-r} option resets
+the WRPC CPU before starting the server.
+
+The Zynq UltraScale+ RPU commands provide corresponding operations for the
+Cortex-R5 processors:
+
+\begin{description}
+\item[\texttt{load-rpu0}, \texttt{load-rpu1}] Load an ARM ELF image into the
+  selected RPU and restart it.
+\item[\texttt{gdbserver-rpu0}, \texttt{gdbserver-rpu1}] Start a GDB server
+  for the selected RPU.
+\item[\texttt{checkdbg-rpu0}, \texttt{checkdbg-rpu1}] Inspect and initialize
+  the selected RPU debug port.
+\item[\texttt{clear-tcm-rpu0}, \texttt{clear-tcm-rpu1}] Clear the selected
+  RPU ATCM and BTCM memories.
+\item[\texttt{rpu0}, \texttt{rpu1}] Run RPU subcommands. The subcommands
+  include \texttt{dfault}, \texttt{tcm}, \texttt{mpu},
+  \texttt{rd ADDR [LEN]}, and \texttt{wr ADDR VALUE}.
+\item[\texttt{zynqmp-rpu}] Display ZynqMP RPU status.
+\end{description}
+
+The RPU commands require a Zynq UltraScale+ access method and are not
+available or meaningful on ordinary PCI WRPC deployments.
+
+The exact command set depends on build-time configuration, including the
+selected WRPC architecture, target, and optional board support. Therefore the
+binary's own help output is the final authority:
+
+\begin{lstlisting}
+wrpc help
+wrpc help load vuart
+wrpc board
+\end{lstlisting}
+
+The separate programs \texttt{wrpc-load} and \texttt{wrpc-vuart} are legacy
+standalone tools built from their own source files. The \texttt{wrpc}
+dispatcher is the generic tool and should be preferred when it is available.
+
+\ifwrpctoolstandalone
+\end{document}
+\fi
