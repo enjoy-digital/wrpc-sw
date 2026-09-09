@@ -1,0 +1,31 @@
+# WRPC host tool documentation
+
+This directory documents the generic `tools/wrpc` host utility. The single
+source file `wrpc_tool.tex` is compiled as a standalone PDF and is also
+included as an appendix fragment by the WRPC user manual in `wr-cores`.
+
+## Build the standalone PDF
+
+From this directory, run:
+
+```sh
+make
+```
+
+The PDF is written to `build/wrpc_tool_doc.pdf`.
+
+The host utility is built from `tools/wrpc.c`. From the `wrpc-sw` root, use:
+
+```sh
+make menuconfig       # configure the WRPC software when needed
+make tools             # build tools/wrpc and the companion host tools
+```
+
+For a complete firmware build, configure the target and platform with
+`make menuconfig`, then run `make`. The RISC-V toolchain must be in `PATH`.
+
+To remove generated files:
+
+```sh
+make clean
+```
