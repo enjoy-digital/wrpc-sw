@@ -106,6 +106,8 @@ int sfp_dom_update(void)
 
 int sfp_match(int force)
 {
+	int match;
+
 	if (!force && !sfp_present()) {
 		return -ENODEV;
 	}
@@ -133,9 +135,10 @@ int sfp_match(int force)
 
 	memcpy(sfp_info.sfp_params.pn, sfp_info.sfp_header->vendor_pn,
 	       SFP_PN_LEN);
-	if (storage_match_sfp(&sfp_info.sfp_params) == 0) {
+	match = storage_match_sfp(&sfp_info.sfp_params);
+	if (match <= 0) {
 		sfp_info.sfp_in_db = SFP_NOT_MATCHED;
-		return -ENXIO;
+		return match < 0 ? match : -ENXIO;
 	}
 
 	sfp_info.sfp_in_db = SFP_MATCHED;
