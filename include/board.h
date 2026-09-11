@@ -34,7 +34,7 @@
 #define BASE_VUART              (DEV_BASE + 0x580)
 #define BASE_ONEWIRE            (DEV_BASE + 0x600)
 #define BASE_TIMECODE           (DEV_BASE + 0x700)
-#define BASE_WDIAGS_PRIV        (DEV_BASE + 0x900)
+#define BASE_WDIAGS_PRIV        (DEV_BASE + 0x800)
 #define BASE_CLOCK_MONITOR      (DEV_BASE + 0xa00)
 #ifndef BASE_AUXWB
 #define BASE_AUXWB              (DEV_BASE + 0x8000)
